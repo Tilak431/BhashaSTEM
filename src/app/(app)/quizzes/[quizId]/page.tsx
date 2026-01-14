@@ -60,8 +60,7 @@ interface Quiz {
   description: string;
 }
 
-export default function QuizPage({ params }: { params: { quizId: string } }) {
-  const { quizId } = params;
+export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
   const firestore = useFirestore();
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
   const [loading, setLoading] = useState(true);
