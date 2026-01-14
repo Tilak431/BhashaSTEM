@@ -76,7 +76,7 @@ function QuizClientView({ quizId }: { quizId: string }) {
   );
 
   const { data: quiz, isLoading: isQuizLoading } = useDoc<Quiz>(quizRef);
-  const { data: questions, isLoading: areQuestionsLoading } =
+  const { data: questionsData, isLoading: areQuestionsLoading } =
     useCollection<Omit<Question, 'answers'>>(questionsRef);
 
   useEffect(() => {
@@ -99,6 +99,9 @@ function QuizClientView({ quizId }: { quizId: string }) {
   if (!quiz) {
     return <div>Quiz not found.</div>;
   }
+  
+  const questions = questionsData?.map(q => ({...q, ref: doc(firestore, q.ref.path)})) || [];
+
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8">
@@ -168,7 +171,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: DocumentRe
 }
 
 // --- Teacher View ---
-function TeacherView({ questions, questionsRef }: { questions: (Omit<Question, 'answers'>)[], questionsRef: Query | null }) {
+function TeacherView({ questions, questionsRef }: { questions: (Omit<Question, 'answers'> & { ref: DocumentReference })[], questionsRef: Query | null }) {
   const handleAddQuestion = () => {
     if (!questionsRef) return;
     addDocumentNonBlocking(questionsRef, { text: 'New Question', correctAnswerId: null });
@@ -176,7 +179,7 @@ function TeacherView({ questions, questionsRef }: { questions: (Omit<Question, '
 
   return (
     <div className="space-y-6">
-      {questions.map((q: (Omit<Question, 'answers'>), index: number) => (
+      {questions.map((q: (Omit<Question, 'answers'> & { ref: DocumentReference }), index: number) => (
         <EditableQuestion key={q.id} question={q} index={index} />
       ))}
       <Button onClick={handleAddQuestion} variant="outline" disabled={!questionsRef}>
@@ -190,15 +193,15 @@ function EditableQuestion({
   question,
   index,
 }: {
-  question: (Omit<Question, 'answers'>);
+  question: (Omit<Question, 'answers'> & { ref: DocumentReference });
   index: number;
 }) {
   const firestore = useFirestore();
   const [questionText, setQuestionText] = useState(question.text);
   
   const questionDocRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, question.ref.path) : null),
-    [firestore, question.ref.path]
+    () => (firestore ? question.ref : null),
+    [firestore, question.ref]
   );
   
   const answersRef = useMemoFirebase(
@@ -212,9 +215,9 @@ function EditableQuestion({
 
   useEffect(() => {
     if (answersData) {
-      setLocalAnswers(answersData);
+      setLocalAnswers(answersData.map(a => ({...a, ref: doc(firestore, a.ref.path)})));
     }
-  }, [answersData]);
+  }, [answersData, firestore]);
   
   const [isSaving, setIsSaving] = useState(false);
 
@@ -240,8 +243,9 @@ function EditableQuestion({
     localAnswers.forEach(localAns => {
       const originalAns = answersData.find(a => a.id === localAns.id);
       if (originalAns && originalAns.text !== localAns.text) {
-        const answerDocRef = doc(firestore, `${questionDocRef.path}/answers/${localAns.id}`);
-        batch.update(answerDocRef, { text: localAns.text });
+        if(localAns.ref) {
+           batch.update(localAns.ref, { text: localAns.text });
+        }
       }
     });
     
@@ -258,8 +262,9 @@ function EditableQuestion({
     if (questionDocRef) {
       // Also delete subcollection
       answersData?.forEach(ans => {
-        const answerDocRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
-        deleteDocumentNonBlocking(answerDocRef);
+         if (ans.ref) {
+            deleteDocumentNonBlocking(ans.ref);
+         }
       })
       deleteDocumentNonBlocking(questionDocRef);
     }
@@ -344,15 +349,15 @@ function EditableAnswer({
 }: {
   answer: Omit<Answer, 'ref'> & {ref?: DocumentReference};
   answersData: Answer[];
-  question: (Omit<Question, 'answers'>);
+  question: (Omit<Question, 'answers'> & { ref: DocumentReference });
   questionDocRef: DocumentReference | null;
   onTextChange: (answerId: string, newText: string) => void;
 }) {
   const firestore = useFirestore();
 
   const answerDocRef = useMemoFirebase(
-    () => (firestore && questionDocRef ? doc(firestore, `${questionDocRef.path}/answers/${answer.id}`) : null),
-    [firestore, questionDocRef, answer.id]
+    () => (answer.ref ? answer.ref : null),
+    [answer.ref]
   );
   
   const handleSetCorrect = async () => {
@@ -363,11 +368,12 @@ function EditableAnswer({
       batch.update(questionDocRef, { correctAnswerId: answer.id });
 
       answersData.forEach(ans => {
-        const otherAnswerRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
-        if (ans.id === answer.id) {
-           if(!ans.isCorrect) batch.update(otherAnswerRef, { isCorrect: true });
-        } else if (ans.isCorrect) {
-           batch.update(otherAnswerRef, { isCorrect: false });
+        if(ans.ref) {
+            if (ans.id === answer.id) {
+               if(!ans.isCorrect) batch.update(ans.ref, { isCorrect: true });
+            } else if (ans.isCorrect) {
+               batch.update(ans.ref, { isCorrect: false });
+            }
         }
       });
       
@@ -417,7 +423,7 @@ function EditableAnswer({
 }
 
 // --- Student View ---
-function StudentView({ questions }: { questions: (Omit<Question, 'answers'>)[] | null }) {
+function StudentView({ questions }: { questions: (Omit<Question, 'answers'> & { ref: DocumentReference })[] | null }) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(
     {}
   );
@@ -479,8 +485,8 @@ function QuestionDisplay({
 }) {
   const firestore = useFirestore();
   const answersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, `${question.ref.path}/answers`) : null),
-    [firestore, question.ref.path]
+    () => (firestore ? collection(question.ref, 'answers') : null),
+    [firestore, question.ref]
   );
   const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Answer>(answersRef);
@@ -537,5 +543,3 @@ function QuestionDisplay({
 export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
   return <QuizClientView quizId={quizId} />;
 }
-
-    
