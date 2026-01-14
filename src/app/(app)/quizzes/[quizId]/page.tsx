@@ -220,13 +220,14 @@ function EditableQuestion({
   const originalAnswersJSON = useMemo(() => JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []), [answersData]);
   
   const hasChanges = useMemo(() => {
+    if (!answersData) return false; // Don't allow saving if original answers haven't loaded
     const currentAnswersJSON = JSON.stringify(localAnswers.map(({ ref, ...rest }) => rest));
     return question.text !== questionText || originalAnswersJSON !== currentAnswersJSON;
-  }, [question.text, questionText, originalAnswersJSON, localAnswers]);
+  }, [question.text, questionText, originalAnswersJSON, localAnswers, answersData]);
 
 
   const handleQuestionSave = async () => {
-    if (!questionDocRef || !firestore) return;
+    if (!questionDocRef || !firestore || !answersData) return;
     setIsSaving(true);
     
     const batch = writeBatch(firestore);
@@ -236,7 +237,7 @@ function EditableQuestion({
     }
 
     localAnswers.forEach(localAns => {
-      const originalAns = answersData?.find(a => a.id === localAns.id);
+      const originalAns = answersData.find(a => a.id === localAns.id);
       if (originalAns && originalAns.text !== localAns.text) {
         const answerDocRef = doc(firestore, `${questionDocRef.path}/answers/${localAns.id}`);
         batch.update(answerDocRef, { text: localAns.text });
@@ -254,6 +255,11 @@ function EditableQuestion({
 
   const handleQuestionDelete = () => {
     if (questionDocRef) {
+      // Also delete subcollection
+      answersData?.forEach(ans => {
+        const answerDocRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
+        deleteDocumentNonBlocking(answerDocRef);
+      })
       deleteDocumentNonBlocking(questionDocRef);
     }
   };
@@ -527,6 +533,6 @@ function QuestionDisplay({
 }
 
 
-export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
-  return <QuizClientView quizId={quizId} />;
+export default function QuizPage({ params }: { params: { quizId: string } }) {
+  return <QuizClientView quizId={params.quizId} />;
 }
