@@ -13,7 +13,6 @@ import {
 import {
   doc,
   collection,
-  updateDoc,
   writeBatch,
 } from 'firebase/firestore';
 import {
@@ -30,7 +29,6 @@ import { Label } from '@/components/ui/label';
 import {
   Trash2,
   PlusCircle,
-  Save,
   Loader2,
   Check,
   X,
@@ -200,7 +198,7 @@ function EditableQuestion({
     [questionDocRef]
   );
   const { data: answers, isLoading: areAnswersLoading } =
-    useCollection<Answer>(answersRef);
+    useCollection<Answer & { ref: any }>(answersRef);
 
   const handleQuestionSave = () => {
     if (questionDocRef && questionText !== question.text) {
@@ -294,13 +292,12 @@ function EditableAnswer({
   };
 
   const handleSetCorrect = async () => {
-     if (!questionDocRef || !firestore || !answers) return;
+     if (!questionDocRef || !firestore || !answers || !answerDocRef) return;
 
       const batch = writeBatch(firestore);
       
       // Set the new correct answer
-      const newCorrectAnswerRef = doc(firestore, answer.ref.path);
-      batch.update(newCorrectAnswerRef, { isCorrect: true });
+      batch.update(answerDocRef, { isCorrect: true });
 
       // Unset all other answers
       answers.forEach(ans => {
@@ -313,7 +310,7 @@ function EditableAnswer({
       // Update the question's correctAnswerId
       batch.update(questionDocRef, { correctAnswerId: answer.id });
       
-      await batch.commit();
+      await batch.commit().catch(e => console.error("Failed to set correct answer", e));
   };
 
   const handleDeleteAnswer = () => {
@@ -321,8 +318,6 @@ function EditableAnswer({
       deleteDocumentNonBlocking(answerDocRef);
     }
   };
-
-  const isCorrect = questionDocRef?.id && answer.id === answer.isCorrect;
 
   return (
     <div className="flex items-center gap-2">
