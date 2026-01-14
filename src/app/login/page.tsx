@@ -14,11 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/firebase';
-import { signInAnonymously } from 'firebase/auth';
+import { signInWithCustomToken } from 'firebase/auth';
+import { generateAuthToken } from '@/ai/flows/generate-auth-token';
+import { v4 as uuidv4 } from 'uuid';
+import { Loader2 } from 'lucide-react';
 
-// In a real app, these would be stored securely and fetched from a server
-const TEACHER_KEY = 'teacher-secret-key';
-const STUDENT_KEY = 'student-access-key';
+// This component is only for client-side use, so we can import uuid here.
+// In a real app, you might handle UID generation differently.
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,39 +28,42 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     setError('');
+    setLoading(true);
 
     if (!name.trim() || !accessKey.trim()) {
       setError('Please enter your name and access key.');
-      return;
-    }
-
-    let userType: 'teacher' | 'student' | null = null;
-
-    if (accessKey === TEACHER_KEY) {
-      userType = 'teacher';
-    } else if (accessKey === STUDENT_KEY) {
-      userType = 'student';
-    } else {
-      setError('Invalid access key.');
+      setLoading(false);
       return;
     }
 
     try {
-      // For this example, we'll use anonymous sign-in.
-      // In a real app, you would use a more robust authentication method.
-      await signInAnonymously(auth);
+      // Generate a temporary, unique ID for this user session.
+      // Firebase Auth will later assign a permanent UID.
+      const tempUid = uuidv4();
+
+      const { customToken, userType } = await generateAuthToken({
+        name,
+        accessKey,
+        uid: tempUid,
+      });
+
+      // Sign in with the custom token from the backend
+      const userCredential = await signInWithCustomToken(auth, customToken);
 
       // Store user info in local storage for simplicity
       localStorage.setItem('userType', userType);
-      localStorage.setItem('userName', name);
+      localStorage.setItem('userName', userCredential.user.displayName || name);
 
       router.push('/dashboard');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Login failed:', e);
-      setError('An error occurred during login. Please try again.');
+      setError(e.message || 'An error occurred during login. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,6 +88,7 @@ export default function LoginPage() {
               value={name}
               onChange={e => setName(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
           <div className="grid gap-2">
@@ -94,12 +100,14 @@ export default function LoginPage() {
               value={accessKey}
               onChange={e => setAccessKey(e.target.value)}
               required
+              disabled={loading}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
         <CardFooter>
-          <Button className="w-full" onClick={handleLogin}>
+          <Button className="w-full" onClick={handleLogin} disabled={loading}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Enter Class Section
           </Button>
         </CardFooter>

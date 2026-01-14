@@ -21,8 +21,7 @@ service cloud.firestore {
      * Key Security Decisions:
      * - Custom Claims for Roles: The user's role ('teacher' or 'student') for each
      *   class section is expected to be embedded in their authentication token as a
-     *   custom claim. This is a secure and performant alternative to the key-passing
-     *   mechanism described, as security rules cannot safely handle client-provided keys.
+     *   custom claim. This is a secure and performant way to handle authorization.
      *   The expected claim structure is: `request.auth.token.classSections[classSectionId]`.
      * - /classSections Lockdown: The root /classSections collection is not readable
      *   or writable by any client to prevent exposure of sensitive data like access keys.
