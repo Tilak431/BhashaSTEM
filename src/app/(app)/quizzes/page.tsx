@@ -22,8 +22,9 @@ import {
   useFirestore,
   useMemoFirebase,
   addDocumentNonBlocking,
+  deleteDocumentNonBlocking,
 } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
+import { collection, query, getDocs, writeBatch, doc } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -43,7 +54,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { subjects } from '@/lib/data';
-import { PlusCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Loader2, Trash2 } from 'lucide-react';
 
 const subjectIconMap: Record<Subject, React.ElementType> = {
   Physics: PhysicsIcon,
@@ -146,7 +157,10 @@ function CreateQuizDialog({
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting || !name || !description || !subject}>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name || !description || !subject}
+          >
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Create Quiz
           </Button>
@@ -159,7 +173,10 @@ function CreateQuizDialog({
 export default function QuizzesPage() {
   const firestore = useFirestore();
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const type = localStorage.getItem('userType') as
@@ -178,6 +195,50 @@ export default function QuizzesPage() {
   );
   const { data: quizzes, isLoading } = useCollection<Quiz>(quizzesQuery);
 
+  const openDeleteDialog = (quiz: Quiz) => {
+    setQuizToDelete(quiz);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteQuiz = async () => {
+    if (!quizToDelete || !firestore) return;
+
+    setIsDeleting(true);
+    try {
+      const quizRef = doc(
+        firestore,
+        'classSections/IS-B/quizzes',
+        quizToDelete.id
+      );
+
+      // Batch delete subcollections
+      const batch = writeBatch(firestore);
+      const questionsRef = collection(quizRef, 'questions');
+      const questionsSnapshot = await getDocs(questionsRef);
+
+      for (const questionDoc of questionsSnapshot.docs) {
+        const answersRef = collection(questionDoc.ref, 'answers');
+        const answersSnapshot = await getDocs(answersRef);
+        answersSnapshot.forEach(answerDoc => {
+          batch.delete(answerDoc.ref);
+        });
+        batch.delete(questionDoc.ref);
+      }
+
+      // Finally, delete the quiz itself
+      batch.delete(quizRef);
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to delete quiz:', error);
+      // Optionally show an error toast
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+      setQuizToDelete(null);
+    }
+  };
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-2">
@@ -190,7 +251,7 @@ export default function QuizzesPage() {
           </p>
         </div>
         {userType === 'teacher' && (
-          <Button onClick={() => setIsDialogOpen(true)}>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
             <PlusCircle className="mr-2 h-4 w-4" /> Create Quiz
           </Button>
         )}
@@ -199,12 +260,14 @@ export default function QuizzesPage() {
       {isLoading && <p>Loading quizzes...</p>}
 
       {!isLoading && quizzes?.length === 0 && (
-         <div className="text-center text-muted-foreground py-12">
-            <h3 className="text-xl font-semibold">No Quizzes Found</h3>
-            <p>
-              {userType === 'teacher' ? 'Get started by creating a new quiz.' : 'There are no quizzes available at the moment.'}
-            </p>
-          </div>
+        <div className="text-center text-muted-foreground py-12">
+          <h3 className="text-xl font-semibold">No Quizzes Found</h3>
+          <p>
+            {userType === 'teacher'
+              ? 'Get started by creating a new quiz.'
+              : 'There are no quizzes available at the moment.'}
+          </p>
+        </div>
       )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -228,25 +291,73 @@ export default function QuizzesPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow">
-                <p className="text-sm text-muted-foreground">{quiz.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {quiz.description}
+                </p>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="gap-2">
                 <Button asChild className="w-full">
                   <Link href={`/quizzes/${quiz.id}`}>
                     {userType === 'teacher' ? 'Edit Quiz' : 'Start Quiz'}
                   </Link>
                 </Button>
+                {userType === 'teacher' && (
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => openDeleteDialog(quiz)}
+                    aria-label="Delete quiz"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           );
         })}
       </div>
       {userType === 'teacher' && (
-        <CreateQuizDialog
-          isOpen={isDialogOpen}
-          onClose={() => setIsDialogOpen(false)}
-          quizzesRef={quizzesQuery ? collection(firestore!, 'classSections/IS-B/quizzes') : null}
-        />
+        <>
+          <CreateQuizDialog
+            isOpen={isCreateDialogOpen}
+            onClose={() => setIsCreateDialogOpen(false)}
+            quizzesRef={
+              quizzesQuery
+                ? collection(firestore!, 'classSections/IS-B/quizzes')
+                : null
+            }
+          />
+          <AlertDialog
+            open={isDeleteDialogOpen}
+            onOpenChange={setIsDeleteDialogOpen}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the
+                  quiz "{quizToDelete?.name}" and all of its associated
+                  questions and answers.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteQuiz}
+                  disabled={isDeleting}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  {isDeleting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Yes, delete quiz
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       )}
     </div>
   );
