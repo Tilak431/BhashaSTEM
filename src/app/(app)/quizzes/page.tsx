@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -16,8 +17,33 @@ import {
 import type { Subject } from '@/lib/data';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import {
+  useCollection,
+  useFirestore,
+  useMemoFirebase,
+  addDocumentNonBlocking,
+} from '@/firebase';
+import { collection, query } from 'firebase/firestore';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { subjects } from '@/lib/data';
+import { PlusCircle, Loader2 } from 'lucide-react';
 
 const subjectIconMap: Record<Subject, React.ElementType> = {
   Physics: PhysicsIcon,
@@ -34,8 +60,115 @@ interface Quiz {
   questionCount: number;
 }
 
+function CreateQuizDialog({
+  isOpen,
+  onClose,
+  quizzesRef,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  quizzesRef: any;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState<Subject | ''>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!name || !description || !subject || !quizzesRef) return;
+    setIsSubmitting(true);
+    try {
+      await addDocumentNonBlocking(quizzesRef, {
+        name,
+        description,
+        subject,
+        questionCount: 0,
+      });
+      // Reset form and close
+      setName('');
+      setDescription('');
+      setSubject('');
+      onClose();
+    } catch (error) {
+      console.error('Failed to create quiz:', error);
+      // Optionally, show an error toast to the user
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create a New Quiz</DialogTitle>
+          <DialogDescription>
+            Fill out the details below to create a new assessment for your
+            class.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="quiz-name">Quiz Name</Label>
+            <Input
+              id="quiz-name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g., Introduction to Kinematics"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="quiz-description">Description</Label>
+            <Textarea
+              id="quiz-description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="A brief summary of what this quiz covers."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="quiz-subject">Subject</Label>
+            <Select onValueChange={value => setSubject(value as Subject)}>
+              <SelectTrigger id="quiz-subject">
+                <SelectValue placeholder="Select a subject" />
+              </SelectTrigger>
+              <SelectContent>
+                {subjects.map(s => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !name || !description || !subject}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Create Quiz
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function QuizzesPage() {
   const firestore = useFirestore();
+  const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const type = localStorage.getItem('userType') as
+      | 'student'
+      | 'teacher'
+      | null;
+    setUserType(type);
+  }, []);
+
   const quizzesQuery = useMemoFirebase(
     () =>
       firestore
@@ -47,15 +180,33 @@ export default function QuizzesPage() {
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex flex-col space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight font-headline">
-          Assessments
-        </h2>
-        <p className="text-muted-foreground">
-          Test your knowledge and find where you can improve.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-2">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight font-headline">
+            Assessments
+          </h2>
+          <p className="text-muted-foreground">
+            Test your knowledge and find where you can improve.
+          </p>
+        </div>
+        {userType === 'teacher' && (
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Create Quiz
+          </Button>
+        )}
       </div>
+
       {isLoading && <p>Loading quizzes...</p>}
+
+      {!isLoading && quizzes?.length === 0 && (
+         <div className="text-center text-muted-foreground py-12">
+            <h3 className="text-xl font-semibold">No Quizzes Found</h3>
+            <p>
+              {userType === 'teacher' ? 'Get started by creating a new quiz.' : 'There are no quizzes available at the moment.'}
+            </p>
+          </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {quizzes?.map(quiz => {
           const Icon = subjectIconMap[quiz.subject];
@@ -77,17 +228,26 @@ export default function QuizzesPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow">
-                <p>{quiz.description}</p>
+                <p className="text-sm text-muted-foreground">{quiz.description}</p>
               </CardContent>
               <CardFooter>
                 <Button asChild className="w-full">
-                  <Link href={`/quizzes/${quiz.id}`}>Start Quiz</Link>
+                  <Link href={`/quizzes/${quiz.id}`}>
+                    {userType === 'teacher' ? 'Edit Quiz' : 'Start Quiz'}
+                  </Link>
                 </Button>
               </CardFooter>
             </Card>
           );
         })}
       </div>
+      {userType === 'teacher' && (
+        <CreateQuizDialog
+          isOpen={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          quizzesRef={quizzesQuery ? collection(firestore!, 'classSections/IS-B/quizzes') : null}
+        />
+      )}
     </div>
   );
 }

@@ -6,13 +6,15 @@ import {
   useDoc,
   useCollection,
   useMemoFirebase,
+  updateDocumentNonBlocking,
+  addDocumentNonBlocking,
+  deleteDocumentNonBlocking,
 } from '@/firebase';
 import {
   doc,
   collection,
   updateDoc,
-  addDoc,
-  deleteDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import {
   Card,
@@ -34,20 +36,19 @@ import {
   X,
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { updateDocumentNonBlocking } from '@/firebase';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Answer {
   id: string;
   text: string;
   isCorrect: boolean;
-  ref: any;
 }
 
 interface Question {
   id: string;
   text: string;
   correctAnswerId?: string;
-  ref: any;
+  ref: any; // Keep ref for subcollection pathing
 }
 
 interface Quiz {
@@ -99,29 +100,73 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold font-headline">
-            {quiz.name}
-          </CardTitle>
-          <CardDescription>{quiz.description}</CardDescription>
-        </CardHeader>
-      </Card>
+      {userType === 'teacher' ? (
+        <EditableQuizHeader quiz={quiz} quizRef={quizRef} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-3xl font-bold font-headline">
+              {quiz.name}
+            </CardTitle>
+            <CardDescription>{quiz.description}</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       {userType === 'teacher' ? (
         <TeacherView questions={questions} questionsRef={questionsRef} />
       ) : (
-        <StudentView questions={questions} questionsRef={questionsRef} />
+        <StudentView questions={questions} />
       )}
     </div>
   );
 }
 
+
+function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: any }) {
+    const [name, setName] = useState(quiz.name);
+    const [description, setDescription] = useState(quiz.description);
+
+    const handleSave = () => {
+        if (!quizRef) return;
+        if (name !== quiz.name || description !== quiz.description) {
+            updateDocumentNonBlocking(quizRef, { name, description });
+        }
+    }
+
+    return (
+         <Card>
+            <CardHeader className="space-y-4">
+               <div>
+                 <Label htmlFor="quiz-title" className="text-sm font-medium">Quiz Title</Label>
+                 <Input 
+                    id="quiz-title"
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)}
+                    onBlur={handleSave}
+                    className="text-3xl font-bold font-headline h-auto p-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+               </div>
+               <div>
+                <Label htmlFor="quiz-description" className="text-sm font-medium">Description</Label>
+                 <Textarea
+                    id="quiz-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    onBlur={handleSave}
+                    className="border-none p-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-muted-foreground"
+                />
+               </div>
+            </CardHeader>
+        </Card>
+    )
+}
+
 // --- Teacher View ---
 function TeacherView({ questions, questionsRef }: any) {
-  const handleAddQuestion = async () => {
+  const handleAddQuestion = () => {
     if (!questionsRef) return;
-    await addDoc(questionsRef, { text: 'New Question' });
+    addDocumentNonBlocking(questionsRef, { text: 'New Question', correctAnswerId: null });
   };
 
   return (
@@ -147,7 +192,7 @@ function EditableQuestion({
   const [questionText, setQuestionText] = useState(question.text);
 
   const questionDocRef = useMemoFirebase(
-    () => (firestore && question.ref ? doc(firestore, `${question.ref.path}`) : null),
+    () => (firestore && question.ref ? doc(firestore, question.ref.path) : null),
     [firestore, question]
   );
   const answersRef = useMemoFirebase(
@@ -157,21 +202,21 @@ function EditableQuestion({
   const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Answer>(answersRef);
 
-  const handleQuestionSave = async () => {
+  const handleQuestionSave = () => {
     if (questionDocRef && questionText !== question.text) {
       updateDocumentNonBlocking(questionDocRef, { text: questionText });
     }
   };
 
-  const handleQuestionDelete = async () => {
+  const handleQuestionDelete = () => {
     if (questionDocRef) {
-      await deleteDoc(questionDocRef);
+      deleteDocumentNonBlocking(questionDocRef);
     }
   };
 
-  const handleAddAnswer = async () => {
+  const handleAddAnswer = () => {
     if (answersRef) {
-      await addDoc(answersRef, { text: 'New Answer', isCorrect: false });
+      addDocumentNonBlocking(answersRef, { text: 'New Answer', isCorrect: false });
     }
   };
 
@@ -193,6 +238,7 @@ function EditableQuestion({
             onChange={e => setQuestionText(e.target.value)}
             onBlur={handleQuestionSave}
             className="flex-1"
+            disabled={!questionDocRef}
           />
           <Button
             variant="ghost"
@@ -210,12 +256,15 @@ function EditableQuestion({
           <EditableAnswer
             key={answer.id}
             answer={answer}
+            answers={answers}
             questionDocRef={questionDocRef}
           />
         ))}
-        <Button onClick={handleAddAnswer} variant="ghost" size="sm" disabled={!answersRef}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
-        </Button>
+        {(!answers || answers.length < 5) && (
+            <Button onClick={handleAddAnswer} variant="ghost" size="sm" disabled={!answersRef}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
+            </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -223,39 +272,57 @@ function EditableQuestion({
 
 function EditableAnswer({
   answer,
+  answers,
   questionDocRef,
 }: {
-  answer: Answer;
+  answer: Answer & {id: string, ref: any};
+  answers: (Answer & {id: string, ref: any})[];
   questionDocRef: any;
 }) {
   const [answerText, setAnswerText] = useState(answer.text);
   const firestore = useFirestore();
 
   const answerDocRef = useMemoFirebase(
-    () => (firestore && questionDocRef ? doc(questionDocRef, 'answers', answer.id) : null),
-    [firestore, questionDocRef, answer.id]
+    () => (firestore && answer.ref ? doc(firestore, answer.ref.path) : null),
+    [firestore, answer]
   );
   
-  const handleAnswerSave = async () => {
+  const handleAnswerSave = () => {
     if (answerDocRef && answerText !== answer.text) {
       updateDocumentNonBlocking(answerDocRef, { text: answerText });
     }
   };
 
   const handleSetCorrect = async () => {
-    if (answerDocRef && questionDocRef) {
-      // This is a simplified approach. A real app should use a transaction
-      // to ensure only one answer is marked as correct.
-      updateDocumentNonBlocking(questionDocRef, { correctAnswerId: answer.id });
-      updateDocumentNonBlocking(answerDocRef, { isCorrect: true });
+     if (!questionDocRef || !firestore || !answers) return;
+
+      const batch = writeBatch(firestore);
+      
+      // Set the new correct answer
+      const newCorrectAnswerRef = doc(firestore, answer.ref.path);
+      batch.update(newCorrectAnswerRef, { isCorrect: true });
+
+      // Unset all other answers
+      answers.forEach(ans => {
+        if (ans.id !== answer.id && ans.isCorrect) {
+           const ansRef = doc(firestore, ans.ref.path);
+           batch.update(ansRef, { isCorrect: false });
+        }
+      });
+      
+      // Update the question's correctAnswerId
+      batch.update(questionDocRef, { correctAnswerId: answer.id });
+      
+      await batch.commit();
+  };
+
+  const handleDeleteAnswer = () => {
+    if (answerDocRef) {
+      deleteDocumentNonBlocking(answerDocRef);
     }
   };
 
-  const handleDeleteAnswer = async () => {
-    if (answerDocRef) {
-      await deleteDoc(answerDocRef);
-    }
-  };
+  const isCorrect = questionDocRef?.id && answer.id === answer.isCorrect;
 
   return (
     <div className="flex items-center gap-2">
@@ -264,6 +331,7 @@ function EditableAnswer({
         size="icon"
         onClick={handleSetCorrect}
         disabled={!answerDocRef || !questionDocRef}
+        aria-label="Set as correct answer"
       >
         <Check className="h-4 w-4" />
       </Button>
@@ -287,7 +355,7 @@ function EditableAnswer({
 }
 
 // --- Student View ---
-function StudentView({ questions, questionsRef }: any) {
+function StudentView({ questions }: { questions: Question[] | null }) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(
     {}
   );
@@ -300,7 +368,7 @@ function StudentView({ questions, questionsRef }: any) {
 
   const handleSubmit = () => {
     let newScore = 0;
-    questions.forEach((q: Question) => {
+    questions?.forEach((q: Question) => {
       if (selectedAnswers[q.id] === q.correctAnswerId) {
         newScore++;
       }
@@ -323,10 +391,10 @@ function StudentView({ questions, questionsRef }: any) {
       ))}
       <CardFooter className="justify-end p-0 pt-4">
         {!submitted ? (
-          <Button onClick={handleSubmit}>Submit Quiz</Button>
+          <Button onClick={handleSubmit} disabled={!questions || Object.keys(selectedAnswers).length !== questions.length}>Submit Quiz</Button>
         ) : (
           <div className="text-xl font-bold">
-            Your Score: {score} / {questions.length}
+            Your Score: {score} / {questions?.length}
           </div>
         )}
       </CardFooter>
@@ -382,7 +450,7 @@ function QuestionDisplay({
               return (
                 <div
                   key={answer.id}
-                  className={`flex items-center space-x-3 rounded-md border p-3 ${
+                  className={`flex items-center space-x-3 rounded-md border p-3 transition-colors ${
                     submitted && isTheCorrectAnswer ? 'border-green-500 bg-green-100 dark:bg-green-900' : ''
                   } ${
                     showResult && !isTheCorrectAnswer ? 'border-red-500 bg-red-100 dark:bg-red-900' : ''
