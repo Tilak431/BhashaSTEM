@@ -219,7 +219,7 @@ function EditableQuestion({
   
   const hasChanges =
     question.text !== questionText ||
-    JSON.stringify(answersData?.map(({ ref, ...rest }) => rest)) !== JSON.stringify(localAnswers);
+    JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []) !== JSON.stringify(localAnswers);
 
 
   const handleQuestionSave = async () => {
@@ -374,10 +374,10 @@ function EditableAnswer({
   return (
     <div className="flex items-center gap-2">
       <Button
-        variant={answer.isCorrect ? 'default' : 'outline'}
+        variant={question.correctAnswerId === answer.id ? 'default' : 'outline'}
         size="icon"
         onClick={handleSetCorrect}
-        disabled={!answerDocRef || !questionDocRef || answer.isCorrect}
+        disabled={!answerDocRef || !questionDocRef || question.correctAnswerId === answer.id}
         aria-label="Set as correct answer"
       >
         <Check className="h-4 w-4" />
