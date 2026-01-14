@@ -48,10 +48,11 @@ interface Answer {
 }
 
 interface Question {
-  id: string;
+  id:string;
   text: string;
   correctAnswerId?: string;
   ref: DocumentReference;
+  answers: Answer[];
 }
 
 interface Quiz {
@@ -76,7 +77,7 @@ function QuizClientView({ quizId }: { quizId: string }) {
 
   const { data: quiz, isLoading: isQuizLoading } = useDoc<Quiz>(quizRef);
   const { data: questions, isLoading: areQuestionsLoading } =
-    useCollection<Question>(questionsRef);
+    useCollection<Omit<Question, 'answers'>>(questionsRef);
 
   useEffect(() => {
     const type = localStorage.getItem('userType') as
@@ -167,7 +168,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: DocumentRe
 }
 
 // --- Teacher View ---
-function TeacherView({ questions, questionsRef }: { questions: Question[], questionsRef: Query | null }) {
+function TeacherView({ questions, questionsRef }: { questions: (Omit<Question, 'answers'>)[], questionsRef: Query | null }) {
   const handleAddQuestion = () => {
     if (!questionsRef) return;
     addDocumentNonBlocking(questionsRef, { text: 'New Question', correctAnswerId: null });
@@ -175,7 +176,7 @@ function TeacherView({ questions, questionsRef }: { questions: Question[], quest
 
   return (
     <div className="space-y-6">
-      {questions.map((q: Question, index: number) => (
+      {questions.map((q: (Omit<Question, 'answers'>), index: number) => (
         <EditableQuestion key={q.id} question={q} index={index} />
       ))}
       <Button onClick={handleAddQuestion} variant="outline" disabled={!questionsRef}>
@@ -189,7 +190,7 @@ function EditableQuestion({
   question,
   index,
 }: {
-  question: Question;
+  question: (Omit<Question, 'answers'>);
   index: number;
 }) {
   const firestore = useFirestore();
@@ -343,7 +344,7 @@ function EditableAnswer({
 }: {
   answer: Omit<Answer, 'ref'> & {ref?: DocumentReference};
   answersData: Answer[];
-  question: Question;
+  question: (Omit<Question, 'answers'>);
   questionDocRef: DocumentReference | null;
   onTextChange: (answerId: string, newText: string) => void;
 }) {
@@ -416,7 +417,7 @@ function EditableAnswer({
 }
 
 // --- Student View ---
-function StudentView({ questions }: { questions: (Question & {ref: DocumentReference})[] | null }) {
+function StudentView({ questions }: { questions: (Omit<Question, 'answers'>)[] | null }) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(
     {}
   );
@@ -429,7 +430,7 @@ function StudentView({ questions }: { questions: (Question & {ref: DocumentRefer
 
   const handleSubmit = () => {
     let newScore = 0;
-    questions?.forEach((q: Question) => {
+    questions?.forEach((q: Omit<Question, 'answers'>) => {
       if (selectedAnswers[q.id] === q.correctAnswerId) {
         newScore++;
       }
@@ -470,7 +471,7 @@ function QuestionDisplay({
   onAnswerChange,
   submitted,
 }: {
-  question: Question & {ref: DocumentReference};
+  question: Omit<Question, 'answers'> & {ref: DocumentReference};
   index: number;
   selectedAnswer: string;
   onAnswerChange: (questionId: string, answerId: string) => void;
@@ -533,8 +534,8 @@ function QuestionDisplay({
 }
 
 
-export default function QuizPage({ params }: { params: { quizId: string } }) {
-  return <QuizClientView quizId={params.quizId} />;
+export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
+  return <QuizClientView quizId={quizId} />;
 }
 
     
