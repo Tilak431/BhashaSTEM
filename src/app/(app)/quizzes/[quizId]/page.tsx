@@ -61,13 +61,14 @@ interface Quiz {
 }
 
 export default function QuizPage({ params }: { params: { quizId: string } }) {
+  const { quizId } = params;
   const firestore = useFirestore();
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
   const [loading, setLoading] = useState(true);
 
   const quizRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, `classSections/IS-B/quizzes/${params.quizId}`) : null),
-    [firestore, params.quizId]
+    () => (firestore ? doc(firestore, `classSections/IS-B/quizzes/${quizId}`) : null),
+    [firestore, quizId]
   );
   const questionsRef = useMemoFirebase(
     () => (quizRef ? collection(quizRef, 'questions') : null),
@@ -516,4 +517,3 @@ function QuestionDisplay({
     </Card>
   );
 }
-
