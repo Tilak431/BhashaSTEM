@@ -15,6 +15,7 @@ import {
   collection,
   writeBatch,
   DocumentReference,
+  Query,
 } from 'firebase/firestore';
 import {
   Card,
@@ -76,7 +77,7 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
   // Data fetching
   const { data: quiz, isLoading: isQuizLoading } = useDoc<Quiz>(quizRef);
   const { data: questions, isLoading: areQuestionsLoading } =
-    useCollection<Question>(questionsRef);
+    useCollection<Question>(questionsRef as Query<Question> | null);
 
   useEffect(() => {
     const type = localStorage.getItem('userType') as
@@ -206,7 +207,7 @@ function EditableQuestion({
     [questionDocRef]
   );
 
-  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef);
+  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef as Query<Answer> | null);
 
   const [localAnswers, setLocalAnswers] = useState<Omit<Answer, 'ref'>[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -467,7 +468,7 @@ function QuestionDisplay({
     [firestore, question]
   );
   const { data: answers, isLoading: areAnswersLoading } =
-    useCollection<Answer>(answersRef);
+    useCollection<Answer>(answersRef as Query<Answer> | null);
 
   return (
     <Card>
