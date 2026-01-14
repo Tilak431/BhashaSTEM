@@ -41,7 +41,6 @@ interface Answer {
   id: string;
   text: string;
   isCorrect: boolean;
-  ref: DocumentReference;
 }
 
 interface Question {
@@ -114,7 +113,7 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
       )}
 
       {userType === 'teacher' ? (
-        <TeacherView questions={questions} questionsRef={questionsRef} />
+        <TeacherView questions={questions} questionsRef={questionsRef} quizRef={quizRef} />
       ) : (
         <StudentView questions={questions} />
       )}
@@ -123,7 +122,7 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
 }
 
 
-function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: any }) {
+function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: DocumentReference | null }) {
     const [name, setName] = useState(quiz.name);
     const [description, setDescription] = useState(quiz.description);
 
@@ -144,6 +143,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: any }) {
                     value={name} 
                     onChange={(e) => setName(e.target.value)}
                     onBlur={handleSave}
+                    disabled={!quizRef}
                     className="text-3xl font-bold font-headline h-auto p-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                </div>
@@ -154,6 +154,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: any }) {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     onBlur={handleSave}
+                    disabled={!quizRef}
                     className="border-none p-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-muted-foreground"
                 />
                </div>
@@ -163,7 +164,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: any }) {
 }
 
 // --- Teacher View ---
-function TeacherView({ questions, questionsRef }: any) {
+function TeacherView({ questions, questionsRef, quizRef }: { questions: Question[] | null, questionsRef: any, quizRef: DocumentReference | null }) {
   const handleAddQuestion = () => {
     if (!questionsRef) return;
     addDocumentNonBlocking(questionsRef, { text: 'New Question', correctAnswerId: null });
@@ -172,7 +173,7 @@ function TeacherView({ questions, questionsRef }: any) {
   return (
     <div className="space-y-6">
       {questions?.map((q: Question, index: number) => (
-        <EditableQuestion key={q.id} question={q} index={index} />
+        <EditableQuestion key={q.id} question={q} index={index} quizRef={quizRef} />
       ))}
       <Button onClick={handleAddQuestion} variant="outline" disabled={!questionsRef}>
         <PlusCircle className="mr-2" /> Add Question
@@ -184,16 +185,18 @@ function TeacherView({ questions, questionsRef }: any) {
 function EditableQuestion({
   question,
   index,
+  quizRef,
 }: {
   question: Question;
   index: number;
+  quizRef: DocumentReference | null;
 }) {
   const firestore = useFirestore();
   const [questionText, setQuestionText] = useState(question.text);
 
   const questionDocRef = useMemoFirebase(
-    () => (firestore && question.ref ? doc(firestore, question.ref.path) : null),
-    [firestore, question]
+    () => (firestore && quizRef ? doc(firestore, `${quizRef.path}/questions/${question.id}`) : null),
+    [firestore, quizRef, question.id]
   );
   
   const answersRef = useMemoFirebase(
@@ -259,7 +262,8 @@ function EditableQuestion({
             <EditableAnswer
               key={answer.id}
               answer={answer}
-              answers={answers}
+              answers={answers || []}
+              question={question}
               questionDocRef={questionDocRef}
             />
           ))
@@ -277,10 +281,12 @@ function EditableQuestion({
 function EditableAnswer({
   answer,
   answers,
+  question,
   questionDocRef,
 }: {
   answer: Answer;
   answers: Answer[];
+  question: Question;
   questionDocRef: DocumentReference | null;
 }) {
   const [answerText, setAnswerText] = useState(answer.text);
@@ -319,19 +325,21 @@ function EditableAnswer({
 
   const handleDeleteAnswer = () => {
     if (answerDocRef) {
+      // If deleting the correct answer, also clear it from the question doc
+      if (question.correctAnswerId === answer.id && questionDocRef) {
+        updateDocumentNonBlocking(questionDocRef, { correctAnswerId: null });
+      }
       deleteDocumentNonBlocking(answerDocRef);
     }
   };
   
-  const isCorrectAnswer = questionDocRef && (questionDocRef.parent.parent?.id === answer.id);
-
   return (
     <div className="flex items-center gap-2">
       <Button
         variant={answer.isCorrect ? 'default' : 'outline'}
         size="icon"
         onClick={handleSetCorrect}
-        disabled={!answerDocRef || !questionDocRef}
+        disabled={!answerDocRef || !questionDocRef || answer.isCorrect}
         aria-label="Set as correct answer"
       >
         <Check className="h-4 w-4" />
@@ -356,7 +364,7 @@ function EditableAnswer({
 }
 
 // --- Student View ---
-function StudentView({ questions }: { questions: Question[] | null }) {
+function StudentView({ questions }: { questions: (Question & {ref: DocumentReference})[] | null }) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(
     {}
   );
@@ -380,7 +388,7 @@ function StudentView({ questions }: { questions: Question[] | null }) {
 
   return (
     <div className="space-y-6">
-      {questions?.map((q: Question, index: number) => (
+      {questions?.map((q, index: number) => (
         <QuestionDisplay
           key={q.id}
           question={q}
@@ -410,7 +418,7 @@ function QuestionDisplay({
   onAnswerChange,
   submitted,
 }: {
-  question: Question;
+  question: Question & {ref: DocumentReference};
   index: number;
   selectedAnswer: string;
   onAnswerChange: (questionId: string, answerId: string) => void;
