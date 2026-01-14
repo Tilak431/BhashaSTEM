@@ -124,8 +124,7 @@ function QuizClientView({ quizId }: { quizId: string }) {
 }
 
 export default function QuizPage({ params }: { params: { quizId: string } }) {
-  const { quizId } = params;
-  return <QuizClientView quizId={quizId} />;
+  return <QuizClientView quizId={params.quizId} />;
 }
 
 
