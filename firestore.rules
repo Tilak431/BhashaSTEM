@@ -1,0 +1,229 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * Core Philosophy: This ruleset implements a role-based access control model
+     * centered on "Class Sections". A user's role (Teacher or Student) for a
+     * specific class section grants them permissions to the data within that
+     * section's hierarchy. User-generated data, such as quiz results, follows a
+     * strict ownership model, but allows read access to teachers from the
+     * relevant class section.
+     *
+     * Data Structure:
+     * - /users/{userId}: Private user profiles.
+     * - /classSections/{classSectionId}: Administrative data, locked from clients.
+     * - /classSections/{classSectionId}/quizzes/...: Quiz content, editable by
+     *   teachers and readable by students of that class section.
+     * - /users/{userId}/studentQuizResults/...: Private student submissions,
+     *   readable by the student owner and relevant teachers.
+     *
+     * Key Security Decisions:
+     * - Custom Claims for Roles: The user's role ('teacher' or 'student') for each
+     *   class section is expected to be embedded in their authentication token as a
+     *   custom claim. This is a secure and performant alternative to the key-passing
+     *   mechanism described, as security rules cannot safely handle client-provided keys.
+     *   The expected claim structure is: `request.auth.token.classSections[classSectionId]`.
+     * - /classSections Lockdown: The root /classSections collection is not readable
+     *   or writable by any client to prevent exposure of sensitive data like access keys.
+     *   It is assumed this data is managed by a trusted backend server/admin SDK.
+     * - User Privacy: Users cannot list or read other users' profiles or quiz results,
+     *   except for teachers who are explicitly granted read access to results for
+     *   quizzes in their own class sections.
+     *
+     * Denormalization for Authorization:
+     * To allow teachers to view student results without complex queries, the
+     * `StudentQuizResult` document MUST contain a denormalized `classSectionId` field.
+     * This allows rules on `/users/{userId}/studentQuizResults/{resultId}` to securely
+     * grant read access to a teacher by checking their custom claims for that specific
+     * `classSectionId`, avoiding slow and costly cross-collection `get` calls where possible.
+     */
+
+    // --------------------------------------------------------------------------
+    // Helper Functions
+    // --------------------------------------------------------------------------
+
+    /**
+     * Returns true if the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Returns true if the authenticated user's UID matches the provided userId.
+     * This is the foundation of the ownership model.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Returns true if the document exists and the user is the owner.
+     * Used for safe update and delete operations.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * Safely retrieves the user's role for a given class section from their auth token claims.
+     * Assumes a backend function sets custom claims upon successful key validation.
+     * Example claim: { "classSections": { "IS-B": "teacher", "CS-A": "student" } }
+     */
+    function getClassSectionRole(classSectionId) {
+      return request.auth.token.classSections[classSectionId];
+    }
+
+    /**
+     * Returns true if the user has a 'teacher' role for the given class section.
+     */
+    function isTeacher(classSectionId) {
+      return isSignedIn() && getClassSectionRole(classSectionId) == 'teacher';
+    }
+
+    /**
+     * Returns true if the user has a 'student' role for the given class section.
+     */
+    function isStudent(classSectionId) {
+      return isSignedIn() && getClassSectionRole(classSectionId) == 'student';
+    }
+
+    /**
+     * Returns true if the user is either a student or a teacher in the class section.
+     */
+    function canAccessClassSection(classSectionId) {
+      return isTeacher(classSectionId) || isStudent(classSectionId);
+    }
+    
+    /**
+     * A shorthand for accessing the incoming document data on a write request.
+     */
+    function incomingData() {
+      return request.resource.data;
+    }
+
+    /**
+     * A shorthand for accessing the existing document data.
+     */
+    function existingData() {
+      return resource.data;
+    }
+
+
+    // --------------------------------------------------------------------------
+    // Collection Rules
+    // --------------------------------------------------------------------------
+
+    /**
+     * @description Users can create, read, and update their own profile information. They cannot view or list other users' profiles.
+     * @path /users/{userId}
+     * @allow (create) An authenticated user creates their own user document: auth.uid === userId.
+     * @deny (get) A user tries to read another user's profile: auth.uid !== userId.
+     * @deny (list) Any user tries to query the /users collection.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && incomingData().id == userId;
+      allow update: if isExistingOwner(userId) && incomingData().id == existingData().id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Class section documents contain sensitive keys and are managed by a backend admin process. They are not directly accessible by clients.
+     * @path /classSections/{classSectionId}
+     * @allow (none) All client-side operations are denied.
+     * @deny (get) A student or teacher tries to read the class section document directly.
+     * @principle Protects sensitive configuration data by prohibiting all client access.
+     */
+    match /classSections/{classSectionId} {
+      allow get: if false;
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    /**
+     * @description Teachers of a class section can create, update, and delete quizzes. Students of the same section can read them.
+     * @path /classSections/{classSectionId}/quizzes/{quizId}
+     * @allow (create) A user with a 'teacher' claim for 'IS-B' creates a quiz in /classSections/IS-B/quizzes.
+     * @allow (get) A user with a 'student' claim for 'IS-B' reads a quiz in /classSections/IS-B/quizzes.
+     * @deny (update) A student tries to modify a quiz description.
+     * @principle Enforces role-based permissions using custom auth claims for a shared data tree.
+     */
+    match /classSections/{classSectionId}/quizzes/{quizId} {
+      allow get, list: if canAccessClassSection(classSectionId);
+      allow create: if isTeacher(classSectionId) && incomingData().classSectionId == classSectionId;
+      allow update: if isTeacher(classSectionId) && resource != null && incomingData().classSectionId == existingData().classSectionId;
+      allow delete: if isTeacher(classSectionId) && resource != null;
+    }
+
+    /**
+     * @description Teachers can manage questions within a quiz. Students can read them.
+     * @path /classSections/{classSectionId}/quizzes/{quizId}/questions/{questionId}
+     * @allow (create) A teacher for the class section adds a new question to a quiz.
+     * @allow (list) A student in the class section lists all questions for a quiz they are taking.
+     * @deny (delete) A student attempts to delete a question from a quiz.
+     * @principle Inherits role-based permissions from the parent collection path.
+     */
+    match /classSections/{classSectionId}/quizzes/{quizId}/questions/{questionId} {
+      allow get, list: if canAccessClassSection(classSectionId);
+      allow create: if isTeacher(classSectionId) && incomingData().quizId == quizId;
+      allow update: if isTeacher(classSectionId) && resource != null && incomingData().quizId == existingData().quizId;
+      allow delete: if isTeacher(classSectionId) && resource != null;
+    }
+
+    /**
+     * @description Teachers can manage answer options for a question. Students can read them.
+     * @path /classSections/{classSectionId}/quizzes/{quizId}/questions/{questionId}/answers/{answerId}
+     * @allow (create) A teacher for the class section adds a new answer option to a question.
+     * @allow (get) A student in the class section reads an answer option.
+     * @deny (update) A student tries to change the text of an answer option.
+     * @principle Inherits role-based permissions from the parent collection path.
+     */
+    match /classSections/{classSectionId}/quizzes/{quizId}/questions/{questionId}/answers/{answerId} {
+      allow get, list: if canAccessClassSection(classSectionId);
+      allow create: if isTeacher(classSectionId) && incomingData().questionId == questionId;
+      allow update: if isTeacher(classSectionId) && resource != null && incomingData().questionId == existingData().questionId;
+      allow delete: if isTeacher(classSectionId) && resource != null;
+    }
+
+    /**
+     * @description A student can create and manage their own quiz results. A teacher of the corresponding class can read these results.
+     * @path /users/{userId}/studentQuizResults/{studentQuizResultId}
+     * @allow (create) A student submits their quiz result document under their own /users/{userId} path.
+     * @allow (get) A teacher with a valid claim for the result's 'classSectionId' reads the student's score.
+     * @deny (get) Another student tries to read this student's quiz result.
+     * @deny (update) A teacher tries to change a student's score.
+     * @principle Enforces document ownership for writes and allows specific, role-based read access for authorized collaborators (teachers).
+     */
+    match /users/{userId}/studentQuizResults/{studentQuizResultId} {
+      // CRITICAL: Teacher read access requires the `StudentQuizResult` document to contain a `classSectionId` field.
+      allow get: if isOwner(userId) || (resource != null && isTeacher(resource.data.classSectionId));
+      allow list: if isOwner(userId);
+      // A user must be a registered student in the class section to submit a result.
+      allow create: if isOwner(userId) && incomingData().userId == userId && isStudent(incomingData().classSectionId);
+      allow update: if isExistingOwner(userId) && incomingData().userId == existingData().userId && incomingData().classSectionId == existingData().classSectionId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description A student can create and manage their specific answers for a quiz attempt. A teacher of the class can read them.
+     * @path /users/{userId}/studentQuizResults/{studentQuizResultId}/studentAnswers/{studentAnswerId}
+     * @allow (create) A student creates their individual answers as part of a quiz submission.
+     * @allow (get) A teacher reads a student's specific answer while reviewing a quiz submission.
+     * @deny (get) A student tries to read another student's answers.
+     * @principle Uses a `get()` call to the parent document to securely check permissions for nested data.
+     */
+    match /users/{userId}/studentQuizResults/{studentQuizResultId}/studentAnswers/{studentAnswerId} {
+      allow get: if isOwner(userId) || isTeacher(get(/databases/$(database)/documents/users/$(userId)/studentQuizResults/$(studentQuizResultId)).data.classSectionId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && incomingData().studentQuizResultId == studentQuizResultId && isStudent(get(/databases/$(database)/documents/users/$(userId)/studentQuizResults/$(studentQuizResultId)).data.classSectionId);
+      allow update: if isExistingOwner(userId) && incomingData().studentQuizResultId == existingData().studentQuizResultId;
+      allow delete: if isExistingOwner(userId);
+    }
+  }
+}
