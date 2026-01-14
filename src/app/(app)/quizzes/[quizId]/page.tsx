@@ -469,8 +469,6 @@ function QuestionDisplay({
   const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Answer>(answersRef);
 
-  const isCorrect = selectedAnswer === question.correctAnswerId;
-
   return (
     <Card>
       <CardHeader>
@@ -490,23 +488,25 @@ function QuestionDisplay({
           >
             {answers?.map(answer => {
               const isSelected = selectedAnswer === answer.id;
-              const showResult = submitted && isSelected;
-              const isTheCorrectAnswer = answer.id === question.correctAnswerId;
+              const isCorrectAnswer = answer.id === question.correctAnswerId;
 
+              let ringColor = 'ring-transparent';
+              if (submitted) {
+                if (isCorrectAnswer) {
+                  ringColor = 'ring-green-500';
+                } else if (isSelected && !isCorrectAnswer) {
+                  ringColor = 'ring-red-500';
+                }
+              }
+              
               return (
-                <div
-                  key={answer.id}
-                  className={`flex items-center space-x-3 rounded-md border p-3 transition-colors ${
-                    submitted && isTheCorrectAnswer ? 'border-green-500 bg-green-100 dark:bg-green-900' : ''
-                  } ${
-                    showResult && !isTheCorrectAnswer ? 'border-red-500 bg-red-100 dark:bg-red-900' : ''
-                  }`}
-                >
+                <div key={answer.id} className={`flex items-center space-x-3 rounded-md border p-3 transition-all ring-2 ${ringColor}`}>
                   <RadioGroupItem value={answer.id} id={answer.id} />
                   <Label htmlFor={answer.id} className="flex-1 cursor-pointer">
                     {answer.text}
                   </Label>
-                  {showResult && (isCorrect ? <Check className="text-green-600"/> : <X className="text-red-600"/>)}
+                   {submitted && isSelected && !isCorrectAnswer && <X className="text-red-600"/>}
+                   {submitted && isCorrectAnswer && <Check className="text-green-600"/>}
                 </div>
               );
             })}
