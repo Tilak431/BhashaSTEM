@@ -40,12 +40,14 @@ interface Answer {
   id: string;
   text: string;
   isCorrect: boolean;
+  ref: any;
 }
 
 interface Question {
   id: string;
   text: string;
   correctAnswerId?: string;
+  ref: any;
 }
 
 interface Quiz {
@@ -61,11 +63,11 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
 
   // Firestore references
   const quizRef = useMemoFirebase(
-    () => doc(firestore, `classSections/IS-B/quizzes/${params.quizId}`),
+    () => (firestore ? doc(firestore, `classSections/IS-B/quizzes/${params.quizId}`) : null),
     [firestore, params.quizId]
   );
   const questionsRef = useMemoFirebase(
-    () => collection(quizRef, 'questions'),
+    () => (quizRef ? collection(quizRef, 'questions') : null),
     [quizRef]
   );
 
@@ -118,6 +120,7 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
 // --- Teacher View ---
 function TeacherView({ questions, questionsRef }: any) {
   const handleAddQuestion = async () => {
+    if (!questionsRef) return;
     await addDoc(questionsRef, { text: 'New Question' });
   };
 
@@ -126,7 +129,7 @@ function TeacherView({ questions, questionsRef }: any) {
       {questions?.map((q: Question, index: number) => (
         <EditableQuestion key={q.id} question={q} index={index} />
       ))}
-      <Button onClick={handleAddQuestion} variant="outline">
+      <Button onClick={handleAddQuestion} variant="outline" disabled={!questionsRef}>
         <PlusCircle className="mr-2" /> Add Question
       </Button>
     </div>
@@ -144,28 +147,32 @@ function EditableQuestion({
   const [questionText, setQuestionText] = useState(question.text);
 
   const questionDocRef = useMemoFirebase(
-    () => doc(firestore, `${question.ref.path}`),
+    () => (firestore && question.ref ? doc(firestore, `${question.ref.path}`) : null),
     [firestore, question]
   );
   const answersRef = useMemoFirebase(
-    () => collection(questionDocRef, 'answers'),
+    () => (questionDocRef ? collection(questionDocRef, 'answers') : null),
     [questionDocRef]
   );
   const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Answer>(answersRef);
 
   const handleQuestionSave = async () => {
-    if (questionText !== question.text) {
+    if (questionDocRef && questionText !== question.text) {
       updateDocumentNonBlocking(questionDocRef, { text: questionText });
     }
   };
 
   const handleQuestionDelete = async () => {
-    await deleteDoc(questionDocRef);
+    if (questionDocRef) {
+      await deleteDoc(questionDocRef);
+    }
   };
 
   const handleAddAnswer = async () => {
-    await addDoc(answersRef, { text: 'New Answer', isCorrect: false });
+    if (answersRef) {
+      await addDoc(answersRef, { text: 'New Answer', isCorrect: false });
+    }
   };
 
   if (areAnswersLoading) return <Loader2 className="animate-spin" />;
@@ -192,6 +199,7 @@ function EditableQuestion({
             size="icon"
             onClick={handleQuestionDelete}
             aria-label="Delete question"
+            disabled={!questionDocRef}
           >
             <Trash2 className="h-5 w-5 text-destructive" />
           </Button>
@@ -205,7 +213,7 @@ function EditableQuestion({
             questionDocRef={questionDocRef}
           />
         ))}
-        <Button onClick={handleAddAnswer} variant="ghost" size="sm">
+        <Button onClick={handleAddAnswer} variant="ghost" size="sm" disabled={!answersRef}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
         </Button>
       </CardContent>
@@ -221,23 +229,32 @@ function EditableAnswer({
   questionDocRef: any;
 }) {
   const [answerText, setAnswerText] = useState(answer.text);
-  const answerDocRef = doc(questionDocRef, 'answers', answer.id);
+  const firestore = useFirestore();
 
+  const answerDocRef = useMemoFirebase(
+    () => (firestore && questionDocRef ? doc(questionDocRef, 'answers', answer.id) : null),
+    [firestore, questionDocRef, answer.id]
+  );
+  
   const handleAnswerSave = async () => {
-    if (answerText !== answer.text) {
+    if (answerDocRef && answerText !== answer.text) {
       updateDocumentNonBlocking(answerDocRef, { text: answerText });
     }
   };
 
   const handleSetCorrect = async () => {
-    // This is a simplified approach. A real app should use a transaction
-    // to ensure only one answer is marked as correct.
-    updateDocumentNonBlocking(questionDocRef, { correctAnswerId: answer.id });
-    updateDocumentNonBlocking(answerDocRef, { isCorrect: true });
+    if (answerDocRef && questionDocRef) {
+      // This is a simplified approach. A real app should use a transaction
+      // to ensure only one answer is marked as correct.
+      updateDocumentNonBlocking(questionDocRef, { correctAnswerId: answer.id });
+      updateDocumentNonBlocking(answerDocRef, { isCorrect: true });
+    }
   };
 
   const handleDeleteAnswer = async () => {
-    await deleteDoc(answerDocRef);
+    if (answerDocRef) {
+      await deleteDoc(answerDocRef);
+    }
   };
 
   return (
@@ -246,6 +263,7 @@ function EditableAnswer({
         variant={answer.isCorrect ? 'default' : 'outline'}
         size="icon"
         onClick={handleSetCorrect}
+        disabled={!answerDocRef || !questionDocRef}
       >
         <Check className="h-4 w-4" />
       </Button>
@@ -253,12 +271,14 @@ function EditableAnswer({
         value={answerText}
         onChange={e => setAnswerText(e.target.value)}
         onBlur={handleAnswerSave}
+        disabled={!answerDocRef}
       />
       <Button
         variant="ghost"
         size="icon"
         onClick={handleDeleteAnswer}
         aria-label="Delete answer"
+        disabled={!answerDocRef}
       >
         <Trash2 className="h-4 w-4 text-destructive" />
       </Button>
@@ -329,7 +349,7 @@ function QuestionDisplay({
 }) {
   const firestore = useFirestore();
   const answersRef = useMemoFirebase(
-    () => collection(firestore, `${question.ref.path}/answers`),
+    () => (firestore && question.ref ? collection(firestore, `${question.ref.path}/answers`) : null),
     [firestore, question]
   );
   const { data: answers, isLoading: areAnswersLoading } =
