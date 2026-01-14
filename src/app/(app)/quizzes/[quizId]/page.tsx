@@ -195,22 +195,14 @@ function EditableQuestion({
     () => (firestore && question.ref ? doc(firestore, question.ref.path) : null),
     [firestore, question]
   );
+  
   const answersRef = useMemoFirebase(
     () => (questionDocRef ? collection(questionDocRef, 'answers') : null),
     [questionDocRef]
   );
-  const { data: answersData, isLoading: areAnswersLoading } =
+
+  const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Answer>(answersRef);
-
-  const answers = useMemoFirebase(() => {
-    if (!answersData || !answersRef) return [];
-    // Re-attach the full ref to each answer object
-    return answersData.map(ans => ({
-        ...ans,
-        ref: doc(answersRef, ans.id)
-    }));
-  }, [answersData, answersRef]);
-
 
   const handleQuestionSave = () => {
     if (questionDocRef && questionText !== question.text) {
@@ -229,8 +221,6 @@ function EditableQuestion({
       addDocumentNonBlocking(answersRef, { text: 'New Answer', isCorrect: false });
     }
   };
-
-  if (areAnswersLoading) return <Loader2 className="animate-spin" />;
 
   return (
     <Card>
@@ -262,14 +252,18 @@ function EditableQuestion({
         </div>
       </CardHeader>
       <CardContent className="space-y-4 pl-12">
-        {answers?.map(answer => (
-          <EditableAnswer
-            key={answer.id}
-            answer={answer}
-            answers={answers}
-            questionDocRef={questionDocRef}
-          />
-        ))}
+       {areAnswersLoading ? (
+           <Loader2 className="animate-spin" />
+       ) : (
+          answers?.map(answer => (
+            <EditableAnswer
+              key={answer.id}
+              answer={answer}
+              answers={answers}
+              questionDocRef={questionDocRef}
+            />
+          ))
+       )}
         {(!answers || answers.length < 5) && (
             <Button onClick={handleAddAnswer} variant="ghost" size="sm" disabled={!answersRef}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
@@ -292,7 +286,10 @@ function EditableAnswer({
   const [answerText, setAnswerText] = useState(answer.text);
   const firestore = useFirestore();
 
-  const answerDocRef = answer.ref;
+   const answerDocRef = useMemoFirebase(
+    () => (firestore && questionDocRef ? doc(firestore, `${questionDocRef.path}/answers/${answer.id}`) : null),
+    [firestore, questionDocRef, answer.id]
+  );
   
   const handleAnswerSave = () => {
     if (answerDocRef && answerText !== answer.text) {
@@ -307,16 +304,15 @@ function EditableAnswer({
       
       // Set the new correct answer
       batch.update(answerDocRef, { isCorrect: true });
+      batch.update(questionDocRef, { correctAnswerId: answer.id });
 
       // Unset all other answers
       answers.forEach(ans => {
         if (ans.id !== answer.id && ans.isCorrect) {
-           batch.update(ans.ref, { isCorrect: false });
+           const otherAnswerRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
+           batch.update(otherAnswerRef, { isCorrect: false });
         }
       });
-      
-      // Update the question's correctAnswerId
-      batch.update(questionDocRef, { correctAnswerId: answer.id });
       
       await batch.commit().catch(e => console.error("Failed to set correct answer", e));
   };
@@ -326,6 +322,8 @@ function EditableAnswer({
       deleteDocumentNonBlocking(answerDocRef);
     }
   };
+  
+  const isCorrectAnswer = questionDocRef && (questionDocRef.parent.parent?.id === answer.id);
 
   return (
     <div className="flex items-center gap-2">
