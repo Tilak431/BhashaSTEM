@@ -33,6 +33,7 @@ import {
   Loader2,
   Check,
   X,
+  Save,
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,13 +42,14 @@ interface Answer {
   id: string;
   text: string;
   isCorrect: boolean;
+  ref: DocumentReference;
 }
 
 interface Question {
-  id: string;
+  id:string;
   text: string;
   correctAnswerId?: string;
-  ref: DocumentReference; 
+  ref: DocumentReference;
 }
 
 interface Quiz {
@@ -113,7 +115,7 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
       )}
 
       {userType === 'teacher' ? (
-        <TeacherView questions={questions} questionsRef={questionsRef} quizRef={quizRef} />
+        <TeacherView questions={questions || []} questionsRef={questionsRef} quizRef={quizRef} />
       ) : (
         <StudentView questions={questions} />
       )}
@@ -164,7 +166,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: DocumentRe
 }
 
 // --- Teacher View ---
-function TeacherView({ questions, questionsRef, quizRef }: { questions: Question[] | null, questionsRef: any, quizRef: DocumentReference | null }) {
+function TeacherView({ questions, questionsRef, quizRef }: { questions: Question[], questionsRef: any, quizRef: DocumentReference | null }) {
   const handleAddQuestion = () => {
     if (!questionsRef) return;
     addDocumentNonBlocking(questionsRef, { text: 'New Question', correctAnswerId: null });
@@ -172,7 +174,7 @@ function TeacherView({ questions, questionsRef, quizRef }: { questions: Question
 
   return (
     <div className="space-y-6">
-      {questions?.map((q: Question, index: number) => (
+      {questions.map((q: Question, index: number) => (
         <EditableQuestion key={q.id} question={q} index={index} quizRef={quizRef} />
       ))}
       <Button onClick={handleAddQuestion} variant="outline" disabled={!questionsRef}>
@@ -193,7 +195,7 @@ function EditableQuestion({
 }) {
   const firestore = useFirestore();
   const [questionText, setQuestionText] = useState(question.text);
-
+  
   const questionDocRef = useMemoFirebase(
     () => (firestore && quizRef ? doc(firestore, `${quizRef.path}/questions/${question.id}`) : null),
     [firestore, quizRef, question.id]
@@ -204,13 +206,44 @@ function EditableQuestion({
     [questionDocRef]
   );
 
-  const { data: answers, isLoading: areAnswersLoading } =
-    useCollection<Answer>(answersRef);
+  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef);
 
-  const handleQuestionSave = () => {
-    if (questionDocRef && questionText !== question.text) {
-      updateDocumentNonBlocking(questionDocRef, { text: questionText });
+  const [localAnswers, setLocalAnswers] = useState<Omit<Answer, 'ref'>[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (answersData) {
+      setLocalAnswers(answersData.map(({ ref, ...rest }) => rest));
     }
+  }, [answersData]);
+  
+  const hasChanges =
+    question.text !== questionText ||
+    JSON.stringify(answersData?.map(({ ref, ...rest }) => rest)) !== JSON.stringify(localAnswers);
+
+
+  const handleQuestionSave = async () => {
+    if (!questionDocRef || !firestore) return;
+    setIsSaving(true);
+    
+    const batch = writeBatch(firestore);
+    
+    // Save question text
+    if (question.text !== questionText) {
+        batch.update(questionDocRef, { text: questionText });
+    }
+
+    // Save answers
+    localAnswers.forEach(localAns => {
+      const originalAns = answersData?.find(a => a.id === localAns.id);
+      if (originalAns && originalAns.text !== localAns.text) {
+        const answerDocRef = doc(firestore, `${questionDocRef.path}/answers/${localAns.id}`);
+        batch.update(answerDocRef, { text: localAns.text });
+      }
+    });
+
+    await batch.commit();
+    setIsSaving(false);
   };
 
   const handleQuestionDelete = () => {
@@ -224,6 +257,11 @@ function EditableQuestion({
       addDocumentNonBlocking(answersRef, { text: 'New Answer', isCorrect: false });
     }
   };
+
+  const handleAnswerTextChange = (answerId: string, newText: string) => {
+    setLocalAnswers(prev => prev.map(ans => ans.id === answerId ? { ...ans, text: newText } : ans));
+  }
+
 
   return (
     <Card>
@@ -239,7 +277,6 @@ function EditableQuestion({
             id={`q-${question.id}`}
             value={questionText}
             onChange={e => setQuestionText(e.target.value)}
-            onBlur={handleQuestionSave}
             className="flex-1"
             disabled={!questionDocRef}
           />
@@ -258,22 +295,29 @@ function EditableQuestion({
        {areAnswersLoading ? (
            <Loader2 className="animate-spin" />
        ) : (
-          answers?.map(answer => (
+          localAnswers.map(answer => (
             <EditableAnswer
               key={answer.id}
               answer={answer}
-              answers={answers || []}
+              answers={answersData || []}
               question={question}
               questionDocRef={questionDocRef}
+              onTextChange={handleAnswerTextChange}
             />
           ))
        )}
-        {(!answers || answers.length < 5) && (
+        {(!answersData || answersData.length < 5) && (
             <Button onClick={handleAddAnswer} variant="ghost" size="sm" disabled={!answersRef}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
             </Button>
         )}
       </CardContent>
+      <CardFooter className='justify-end'>
+          <Button onClick={handleQuestionSave} disabled={isSaving || !hasChanges}>
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Question
+          </Button>
+      </CardFooter>
     </Card>
   );
 }
@@ -283,26 +327,21 @@ function EditableAnswer({
   answers,
   question,
   questionDocRef,
+  onTextChange
 }: {
-  answer: Answer;
+  answer: Omit<Answer, 'ref'>;
   answers: Answer[];
   question: Question;
   questionDocRef: DocumentReference | null;
+  onTextChange: (answerId: string, newText: string) => void;
 }) {
-  const [answerText, setAnswerText] = useState(answer.text);
   const firestore = useFirestore();
 
-   const answerDocRef = useMemoFirebase(
+  const answerDocRef = useMemoFirebase(
     () => (firestore && questionDocRef ? doc(firestore, `${questionDocRef.path}/answers/${answer.id}`) : null),
     [firestore, questionDocRef, answer.id]
   );
   
-  const handleAnswerSave = () => {
-    if (answerDocRef && answerText !== answer.text) {
-      updateDocumentNonBlocking(answerDocRef, { text: answerText });
-    }
-  };
-
   const handleSetCorrect = async () => {
      if (!questionDocRef || !firestore || !answers || !answerDocRef) return;
 
@@ -325,7 +364,6 @@ function EditableAnswer({
 
   const handleDeleteAnswer = () => {
     if (answerDocRef) {
-      // If deleting the correct answer, also clear it from the question doc
       if (question.correctAnswerId === answer.id && questionDocRef) {
         updateDocumentNonBlocking(questionDocRef, { correctAnswerId: null });
       }
@@ -345,9 +383,8 @@ function EditableAnswer({
         <Check className="h-4 w-4" />
       </Button>
       <Input
-        value={answerText}
-        onChange={e => setAnswerText(e.target.value)}
-        onBlur={handleAnswerSave}
+        value={answer.text}
+        onChange={e => onTextChange(answer.id, e.target.value)}
         disabled={!answerDocRef}
       />
       <Button
