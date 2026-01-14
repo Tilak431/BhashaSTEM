@@ -14,6 +14,7 @@ import {
   doc,
   collection,
   writeBatch,
+  DocumentReference,
 } from 'firebase/firestore';
 import {
   Card,
@@ -40,13 +41,14 @@ interface Answer {
   id: string;
   text: string;
   isCorrect: boolean;
+  ref: DocumentReference;
 }
 
 interface Question {
   id: string;
   text: string;
   correctAnswerId?: string;
-  ref: any; // Keep ref for subcollection pathing
+  ref: DocumentReference; 
 }
 
 interface Quiz {
@@ -197,8 +199,18 @@ function EditableQuestion({
     () => (questionDocRef ? collection(questionDocRef, 'answers') : null),
     [questionDocRef]
   );
-  const { data: answers, isLoading: areAnswersLoading } =
-    useCollection<Answer & { ref: any }>(answersRef);
+  const { data: answersData, isLoading: areAnswersLoading } =
+    useCollection<Answer>(answersRef);
+
+  const answers = useMemoFirebase(() => {
+    if (!answersData || !answersRef) return [];
+    // Re-attach the full ref to each answer object
+    return answersData.map(ans => ({
+        ...ans,
+        ref: doc(answersRef, ans.id)
+    }));
+  }, [answersData, answersRef]);
+
 
   const handleQuestionSave = () => {
     if (questionDocRef && questionText !== question.text) {
@@ -273,17 +285,14 @@ function EditableAnswer({
   answers,
   questionDocRef,
 }: {
-  answer: Answer & {id: string, ref: any};
-  answers: (Answer & {id: string, ref: any})[];
-  questionDocRef: any;
+  answer: Answer;
+  answers: Answer[];
+  questionDocRef: DocumentReference | null;
 }) {
   const [answerText, setAnswerText] = useState(answer.text);
   const firestore = useFirestore();
 
-  const answerDocRef = useMemoFirebase(
-    () => (firestore && answer.ref ? doc(firestore, answer.ref.path) : null),
-    [firestore, answer]
-  );
+  const answerDocRef = answer.ref;
   
   const handleAnswerSave = () => {
     if (answerDocRef && answerText !== answer.text) {
@@ -302,8 +311,7 @@ function EditableAnswer({
       // Unset all other answers
       answers.forEach(ans => {
         if (ans.id !== answer.id && ans.isCorrect) {
-           const ansRef = doc(firestore, ans.ref.path);
-           batch.update(ansRef, { isCorrect: false });
+           batch.update(ans.ref, { isCorrect: false });
         }
       });
       
