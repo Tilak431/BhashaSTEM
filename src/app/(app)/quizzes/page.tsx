@@ -1,4 +1,4 @@
-"use client";
+'use client';
 import {
   Card,
   CardContent,
@@ -6,18 +6,18 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from '@/components/ui/card';
 import {
   BiologyIcon,
   ChemistryIcon,
   MathIcon,
   PhysicsIcon,
-} from "@/components/common/SubjectIcons";
-import type { Subject } from "@/lib/data";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { useCollection, useFirestore } from "@/firebase";
-import { collection, query, where } from "firebase/firestore";
+} from '@/components/common/SubjectIcons';
+import type { Subject } from '@/lib/data';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
 
 const subjectIconMap: Record<Subject, React.ElementType> = {
   Physics: PhysicsIcon,
@@ -36,8 +36,12 @@ interface Quiz {
 
 export default function QuizzesPage() {
   const firestore = useFirestore();
-  const quizzesQuery = query(
-    collection(firestore, "classSections/IS-B/quizzes")
+  const quizzesQuery = useMemoFirebase(
+    () =>
+      firestore
+        ? query(collection(firestore, 'classSections/IS-B/quizzes'))
+        : null,
+    [firestore]
   );
   const { data: quizzes, isLoading } = useCollection<Quiz>(quizzesQuery);
 
@@ -53,7 +57,7 @@ export default function QuizzesPage() {
       </div>
       {isLoading && <p>Loading quizzes...</p>}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {quizzes?.map((quiz) => {
+        {quizzes?.map(quiz => {
           const Icon = subjectIconMap[quiz.subject];
           return (
             <Card
@@ -68,11 +72,12 @@ export default function QuizzesPage() {
                   {Icon && <Icon className="h-7 w-7 text-primary" />}
                 </div>
                 <CardDescription>
-                  A {quiz.subject} quiz with {quiz.questionCount || 0} questions.
+                  A {quiz.subject} quiz with {quiz.questionCount || 0}{' '}
+                  questions.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow">
-                 <p>{quiz.description}</p>
+                <p>{quiz.description}</p>
               </CardContent>
               <CardFooter>
                 <Button asChild className="w-full">
