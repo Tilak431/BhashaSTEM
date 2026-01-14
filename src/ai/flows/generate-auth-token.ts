@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A flow for generating a custom Firebase authentication token.

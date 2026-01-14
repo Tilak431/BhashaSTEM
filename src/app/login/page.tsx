@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -14,10 +15,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/firebase';
-import { signInWithCustomToken, updateProfile } from 'firebase/auth';
-import { generateAuthToken } from '@/ai/flows/generate-auth-token';
-import { v4 as uuidv4 } from 'uuid';
+import { signInAnonymously, updateProfile } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
+
+const TEACHER_KEY = 'teacher-secret-key';
+const STUDENT_KEY = 'student-access-key';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,29 +38,34 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-
+    
     if (!auth) {
         setError('Auth service is not available. Please try again later.');
         setLoading(false);
         return;
     }
 
+    let userType: 'teacher' | 'student';
+    if (accessKey === TEACHER_KEY) {
+        userType = 'teacher';
+    } else if (accessKey === STUDENT_KEY) {
+        userType = 'student';
+    } else {
+        setError('Invalid access key.');
+        setLoading(false);
+        return;
+    }
+
     try {
-      const tempUid = uuidv4();
-
-      const { customToken, userType } = await generateAuthToken({
-        accessKey,
-        uid: tempUid,
-      });
-
-      const userCredential = await signInWithCustomToken(auth, customToken);
-      
+      const userCredential = await signInAnonymously(auth);
       await updateProfile(userCredential.user, { displayName: name });
-
+      
+      // This is a temporary client-side solution for role-based UI
       localStorage.setItem('userType', userType);
       localStorage.setItem('userName', name);
-
+      
       router.push('/dashboard');
+
     } catch (e: any) {
       console.error('Login failed:', e);
       setError(e.message || 'An error occurred during login. Please try again.');
