@@ -60,8 +60,7 @@ interface Quiz {
   description: string;
 }
 
-export default function QuizPage({ params }: { params: { quizId: string } }) {
-  const { quizId } = params;
+function QuizClientView({ quizId }: { quizId: string }) {
   const firestore = useFirestore();
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +121,11 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
       )}
     </div>
   );
+}
+
+export default function QuizPage({ params }: { params: { quizId: string } }) {
+  const { quizId } = params;
+  return <QuizClientView quizId={quizId} />;
 }
 
 
@@ -207,11 +211,11 @@ function EditableQuestion({
 
   const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef);
 
-  const [localAnswers, setLocalAnswers] = useState<(Omit<Answer, 'ref'>)[]>([]);
+  const [localAnswers, setLocalAnswers] = useState<(Omit<Answer, 'ref'> & {ref?: DocumentReference})[]>([]);
 
   useEffect(() => {
     if (answersData) {
-      setLocalAnswers(answersData.map(({ ref, ...rest }) => rest));
+      setLocalAnswers(answersData);
     }
   }, [answersData]);
   
@@ -221,7 +225,7 @@ function EditableQuestion({
   
   const hasChanges =
     question.text !== questionText ||
-    originalAnswersJSON !== JSON.stringify(localAnswers);
+    originalAnswersJSON !== JSON.stringify(localAnswers.map(({ ref, ...rest }) => rest));
 
 
   const handleQuestionSave = async () => {
@@ -282,7 +286,6 @@ function EditableQuestion({
             id={`q-${question.id}`}
             value={questionText}
             onChange={e => setQuestionText(e.target.value)}
-            onBlur={handleQuestionSave}
             className="flex-1"
             disabled={!questionDocRef}
           />
@@ -335,7 +338,7 @@ function EditableAnswer({
   questionDocRef,
   onTextChange
 }: {
-  answer: Omit<Answer, 'ref'>;
+  answer: Omit<Answer, 'ref'> & {ref?: DocumentReference};
   answersData: Answer[];
   question: Question;
   questionDocRef: DocumentReference | null;
