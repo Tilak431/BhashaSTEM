@@ -66,7 +66,7 @@ export default function LoginPage() {
 
       // Store user info in local storage for simplicity
       localStorage.setItem('userType', userType);
-      localStorage.setItem('userName', userCredential.user.displayName || name);
+      localStorage.setItem('userName', name);
 
       router.push('/dashboard');
     } catch (e: any) {

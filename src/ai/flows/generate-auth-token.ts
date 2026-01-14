@@ -37,9 +37,7 @@ export type GenerateAuthTokenOutput = z.infer<
 
 // Initialize Firebase Admin SDK if not already initialized
 if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-  });
+  admin.initializeApp();
 }
 
 export async function generateAuthToken(
