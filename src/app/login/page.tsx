@@ -19,9 +19,6 @@ import { generateAuthToken } from '@/ai/flows/generate-auth-token';
 import { v4 as uuidv4 } from 'uuid';
 import { Loader2 } from 'lucide-react';
 
-// This component is only for client-side use, so we can import uuid here.
-// In a real app, you might handle UID generation differently.
-
 export default function LoginPage() {
   const router = useRouter();
   const auth = useAuth();
@@ -47,24 +44,17 @@ export default function LoginPage() {
     }
 
     try {
-      // Generate a temporary, unique ID for this user session.
-      // Firebase Auth will later assign a permanent UID.
       const tempUid = uuidv4();
 
       const { customToken, userType } = await generateAuthToken({
-        name,
         accessKey,
         uid: tempUid,
       });
 
-      // Sign in with the custom token from the backend
       const userCredential = await signInWithCustomToken(auth, customToken);
       
-      // Now that the user is created, update their profile with the display name
       await updateProfile(userCredential.user, { displayName: name });
 
-
-      // Store user info in local storage for simplicity
       localStorage.setItem('userType', userType);
       localStorage.setItem('userName', name);
 

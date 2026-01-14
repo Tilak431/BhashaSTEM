@@ -19,7 +19,6 @@ const STUDENT_KEY = 'student-access-key';
 const CLASS_SECTION_ID = 'IS-B'; // The class section this key system applies to
 
 const GenerateAuthTokenInputSchema = z.object({
-  name: z.string().describe("The user's display name."),
   accessKey: z.string().describe('The secret key provided by the user.'),
   uid: z.string().describe('A unique identifier for the user session.'),
 });
@@ -52,7 +51,7 @@ const generateAuthTokenFlow = ai.defineFlow(
     inputSchema: GenerateAuthTokenInputSchema,
     outputSchema: GenerateAuthTokenOutputSchema,
   },
-  async ({ name, accessKey, uid }) => {
+  async ({ accessKey, uid }) => {
     let userType: 'teacher' | 'student';
     let claims: { [key: string]: any };
 
