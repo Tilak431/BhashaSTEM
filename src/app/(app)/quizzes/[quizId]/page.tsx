@@ -100,7 +100,7 @@ function QuizClientView({ quizId }: { quizId: string }) {
     return <div>Quiz not found.</div>;
   }
   
-  const questions = questionsData?.map(q => ({...q, ref: doc(firestore, q.ref.path)})) || [];
+  const questions = firestore ? (questionsData?.map(q => ({...q, ref: doc(firestore, `classSections/IS-B/quizzes/${quizId}/questions/${q.id}`)})) || []) : [];
 
 
   return (
@@ -209,19 +209,19 @@ function EditableQuestion({
     [questionDocRef]
   );
 
-  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef);
+  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Omit<Answer, 'ref'>>(answersRef);
 
   const [localAnswers, setLocalAnswers] = useState<(Omit<Answer, 'ref'> & {ref?: DocumentReference})[]>([]);
 
   useEffect(() => {
-    if (answersData) {
-      setLocalAnswers(answersData.map(a => ({...a, ref: doc(firestore, a.ref.path)})));
+    if (answersData && firestore) {
+      setLocalAnswers(answersData.map(a => ({...a, ref: doc(firestore, question.ref.path, 'answers', a.id)})));
     }
-  }, [answersData, firestore]);
+  }, [answersData, firestore, question.ref]);
   
   const [isSaving, setIsSaving] = useState(false);
 
-  const originalAnswersJSON = useMemo(() => JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []), [answersData]);
+  const originalAnswersJSON = useMemo(() => JSON.stringify(answersData?.map(({ ...rest }) => rest) || []), [answersData]);
   
   const hasChanges = useMemo(() => {
     if (!answersData) return false; // Don't allow saving if original answers haven't loaded
@@ -261,7 +261,7 @@ function EditableQuestion({
   const handleQuestionDelete = () => {
     if (questionDocRef) {
       // Also delete subcollection
-      answersData?.forEach(ans => {
+      localAnswers?.forEach(ans => {
          if (ans.ref) {
             deleteDocumentNonBlocking(ans.ref);
          }
@@ -317,7 +317,7 @@ function EditableQuestion({
             <EditableAnswer
               key={answer.id}
               answer={answer}
-              answersData={answersData || []}
+              localAnswers={localAnswers}
               question={question}
               questionDocRef={questionDocRef}
               onTextChange={handleAnswerTextChange}
@@ -342,13 +342,13 @@ function EditableQuestion({
 
 function EditableAnswer({
   answer,
-  answersData,
+  localAnswers,
   question,
   questionDocRef,
   onTextChange
 }: {
   answer: Omit<Answer, 'ref'> & {ref?: DocumentReference};
-  answersData: Answer[];
+  localAnswers: (Omit<Answer, 'ref'> & {ref?: DocumentReference})[];
   question: (Omit<Question, 'answers'> & { ref: DocumentReference });
   questionDocRef: DocumentReference | null;
   onTextChange: (answerId: string, newText: string) => void;
@@ -361,17 +361,17 @@ function EditableAnswer({
   );
   
   const handleSetCorrect = async () => {
-     if (!questionDocRef || !firestore || !answersData || !answerDocRef) return;
+     if (!questionDocRef || !firestore || !localAnswers || !answerDocRef) return;
 
       const batch = writeBatch(firestore);
       
       batch.update(questionDocRef, { correctAnswerId: answer.id });
 
-      answersData.forEach(ans => {
+      localAnswers.forEach(ans => {
         if(ans.ref) {
             if (ans.id === answer.id) {
-               if(!ans.isCorrect) batch.update(ans.ref, { isCorrect: true });
-            } else if (ans.isCorrect) {
+               if(!(ans as Answer).isCorrect) batch.update(ans.ref, { isCorrect: true });
+            } else if ((ans as Answer).isCorrect) {
                batch.update(ans.ref, { isCorrect: false });
             }
         }
@@ -489,7 +489,7 @@ function QuestionDisplay({
     [firestore, question.ref]
   );
   const { data: answers, isLoading: areAnswersLoading } =
-    useCollection<Answer>(answersRef);
+    useCollection<Omit<Answer, 'ref'>>(answersRef);
 
   return (
     <Card>
@@ -543,3 +543,5 @@ function QuestionDisplay({
 export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
   return <QuizClientView quizId={quizId} />;
 }
+
+    
