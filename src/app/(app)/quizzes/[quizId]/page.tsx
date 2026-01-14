@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -64,7 +65,6 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Firestore references
   const quizRef = useMemoFirebase(
     () => (firestore ? doc(firestore, `classSections/IS-B/quizzes/${params.quizId}`) : null),
     [firestore, params.quizId]
@@ -74,10 +74,9 @@ export default function QuizPage({ params }: { params: { quizId: string } }) {
     [quizRef]
   );
 
-  // Data fetching
   const { data: quiz, isLoading: isQuizLoading } = useDoc<Quiz>(quizRef);
   const { data: questions, isLoading: areQuestionsLoading } =
-    useCollection<Question>(questionsRef as Query<Question> | null);
+    useCollection<Question>(questionsRef);
 
   useEffect(() => {
     const type = localStorage.getItem('userType') as
@@ -176,7 +175,7 @@ function TeacherView({ questions, questionsRef, quizRef }: { questions: Question
   return (
     <div className="space-y-6">
       {questions.map((q: Question, index: number) => (
-        <EditableQuestion key={q.id} question={q} index={index} quizRef={quizRef} />
+        <EditableQuestion key={q.id} question={q} index={index} />
       ))}
       <Button onClick={handleAddQuestion} variant="outline" disabled={!questionsRef}>
         <PlusCircle className="mr-2" /> Add Question
@@ -188,18 +187,16 @@ function TeacherView({ questions, questionsRef, quizRef }: { questions: Question
 function EditableQuestion({
   question,
   index,
-  quizRef,
 }: {
   question: Question;
   index: number;
-  quizRef: DocumentReference | null;
 }) {
   const firestore = useFirestore();
   const [questionText, setQuestionText] = useState(question.text);
   
   const questionDocRef = useMemoFirebase(
-    () => (firestore && quizRef ? doc(firestore, `${quizRef.path}/questions/${question.id}`) : null),
-    [firestore, quizRef, question.id]
+    () => (firestore ? doc(firestore, question.ref.path) : null),
+    [firestore, question.ref.path]
   );
   
   const answersRef = useMemoFirebase(
@@ -207,7 +204,7 @@ function EditableQuestion({
     [questionDocRef]
   );
 
-  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef as Query<Answer> | null);
+  const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef);
 
   const [localAnswers, setLocalAnswers] = useState<Omit<Answer, 'ref'>[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -229,12 +226,10 @@ function EditableQuestion({
     
     const batch = writeBatch(firestore);
     
-    // Save question text
     if (question.text !== questionText) {
         batch.update(questionDocRef, { text: questionText });
     }
 
-    // Save answers
     localAnswers.forEach(localAns => {
       const originalAns = answersData?.find(a => a.id === localAns.id);
       if (originalAns && originalAns.text !== localAns.text) {
@@ -242,9 +237,14 @@ function EditableQuestion({
         batch.update(answerDocRef, { text: localAns.text });
       }
     });
-
-    await batch.commit();
-    setIsSaving(false);
+    
+    try {
+        await batch.commit();
+    } catch (e) {
+        console.error("Failed to save question", e);
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const handleQuestionDelete = () => {
@@ -348,14 +348,13 @@ function EditableAnswer({
 
       const batch = writeBatch(firestore);
       
-      // Set the new correct answer
-      batch.update(answerDocRef, { isCorrect: true });
       batch.update(questionDocRef, { correctAnswerId: answer.id });
 
-      // Unset all other answers
       answers.forEach(ans => {
-        if (ans.id !== answer.id && ans.isCorrect) {
-           const otherAnswerRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
+        const otherAnswerRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
+        if (ans.id === answer.id) {
+           batch.update(otherAnswerRef, { isCorrect: true });
+        } else if (ans.isCorrect) {
            batch.update(otherAnswerRef, { isCorrect: false });
         }
       });
@@ -378,7 +377,7 @@ function EditableAnswer({
         variant={question.correctAnswerId === answer.id ? 'default' : 'outline'}
         size="icon"
         onClick={handleSetCorrect}
-        disabled={!answerDocRef || !questionDocRef || question.correctAnswerId === answer.id}
+        disabled={!answerDocRef || !questionDocRef}
         aria-label="Set as correct answer"
       >
         <Check className="h-4 w-4" />
@@ -464,11 +463,11 @@ function QuestionDisplay({
 }) {
   const firestore = useFirestore();
   const answersRef = useMemoFirebase(
-    () => (firestore && question.ref ? collection(firestore, `${question.ref.path}/answers`) : null),
-    [firestore, question]
+    () => (firestore ? collection(firestore, `${question.ref.path}/answers`) : null),
+    [firestore, question.ref.path]
   );
   const { data: answers, isLoading: areAnswersLoading } =
-    useCollection<Answer>(answersRef as Query<Answer> | null);
+    useCollection<Answer>(answersRef);
 
   return (
     <Card>
@@ -517,3 +516,4 @@ function QuestionDisplay({
     </Card>
   );
 }
+
