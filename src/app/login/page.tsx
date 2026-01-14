@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/firebase';
-import { signInWithCustomToken } from 'firebase/auth';
+import { signInWithCustomToken, updateProfile } from 'firebase/auth';
 import { generateAuthToken } from '@/ai/flows/generate-auth-token';
 import { v4 as uuidv4 } from 'uuid';
 import { Loader2 } from 'lucide-react';
@@ -40,6 +40,12 @@ export default function LoginPage() {
       return;
     }
 
+    if (!auth) {
+        setError('Auth service is not available. Please try again later.');
+        setLoading(false);
+        return;
+    }
+
     try {
       // Generate a temporary, unique ID for this user session.
       // Firebase Auth will later assign a permanent UID.
@@ -53,6 +59,10 @@ export default function LoginPage() {
 
       // Sign in with the custom token from the backend
       const userCredential = await signInWithCustomToken(auth, customToken);
+      
+      // Now that the user is created, update their profile with the display name
+      await updateProfile(userCredential.user, { displayName: name });
+
 
       // Store user info in local storage for simplicity
       localStorage.setItem('userType', userType);

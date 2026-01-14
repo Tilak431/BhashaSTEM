@@ -10,7 +10,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import * as admin from 'firebase-admin';
 
 // In a real app, these would be stored securely (e.g., in a secret manager)
@@ -74,7 +74,6 @@ const generateAuthTokenFlow = ai.defineFlow(
 
     try {
       const customToken = await admin.auth().createCustomToken(uid, claims);
-      await admin.auth().updateUser(uid, { displayName: name });
       return { customToken, userType };
     } catch (error) {
       console.error('Error creating custom token:', error);
