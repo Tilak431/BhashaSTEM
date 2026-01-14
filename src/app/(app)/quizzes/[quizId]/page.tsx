@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useMemo, use } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   useFirestore,
   useDoc,
@@ -534,6 +534,7 @@ function QuestionDisplay({
 
 
 export default function QuizPage({ params }: { params: { quizId: string } }) {
-  const resolvedParams = use(Promise.resolve(params));
-  return <QuizClientView quizId={resolvedParams.quizId} />;
+  return <QuizClientView quizId={params.quizId} />;
 }
+
+    
