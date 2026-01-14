@@ -46,7 +46,7 @@ interface Answer {
 }
 
 interface Question {
-  id:string;
+  id: string;
   text: string;
   correctAnswerId?: string;
   ref: DocumentReference;
