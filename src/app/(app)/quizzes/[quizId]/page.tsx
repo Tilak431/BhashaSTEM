@@ -60,7 +60,8 @@ interface Quiz {
   description: string;
 }
 
-export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
+export default function QuizPage({ params }: { params: { quizId: string } }) {
+  const { quizId } = params;
   const firestore = useFirestore();
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +116,7 @@ export default function QuizPage({ params: { quizId } }: { params: { quizId: str
       )}
 
       {userType === 'teacher' ? (
-        <TeacherView questions={questions || []} questionsRef={questionsRef} quizRef={quizRef} />
+        <TeacherView questions={questions || []} questionsRef={questionsRef} />
       ) : (
         <StudentView questions={questions} />
       )}
@@ -166,7 +167,7 @@ function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: DocumentRe
 }
 
 // --- Teacher View ---
-function TeacherView({ questions, questionsRef, quizRef }: { questions: Question[], questionsRef: any, quizRef: DocumentReference | null }) {
+function TeacherView({ questions, questionsRef }: { questions: Question[], questionsRef: Query | null }) {
   const handleAddQuestion = () => {
     if (!questionsRef) return;
     addDocumentNonBlocking(questionsRef, { text: 'New Question', correctAnswerId: null });
@@ -206,8 +207,7 @@ function EditableQuestion({
 
   const { data: answersData, isLoading: areAnswersLoading } = useCollection<Answer>(answersRef);
 
-  const [localAnswers, setLocalAnswers] = useState<Omit<Answer, 'ref'>[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [localAnswers, setLocalAnswers] = useState<(Omit<Answer, 'ref'>)[]>([]);
 
   useEffect(() => {
     if (answersData) {
@@ -215,9 +215,13 @@ function EditableQuestion({
     }
   }, [answersData]);
   
+  const [isSaving, setIsSaving] = useState(false);
+
+  const originalAnswersJSON = useMemoFirebase(() => JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []), [answersData]);
+  
   const hasChanges =
     question.text !== questionText ||
-    JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []) !== JSON.stringify(localAnswers);
+    originalAnswersJSON !== JSON.stringify(localAnswers);
 
 
   const handleQuestionSave = async () => {
@@ -278,6 +282,7 @@ function EditableQuestion({
             id={`q-${question.id}`}
             value={questionText}
             onChange={e => setQuestionText(e.target.value)}
+            onBlur={handleQuestionSave}
             className="flex-1"
             disabled={!questionDocRef}
           />
@@ -296,11 +301,11 @@ function EditableQuestion({
        {areAnswersLoading ? (
            <Loader2 className="animate-spin" />
        ) : (
-          localAnswers.map(answer => (
+          (localAnswers || []).map(answer => (
             <EditableAnswer
               key={answer.id}
               answer={answer}
-              answers={answersData || []}
+              answersData={answersData || []}
               question={question}
               questionDocRef={questionDocRef}
               onTextChange={handleAnswerTextChange}
@@ -325,13 +330,13 @@ function EditableQuestion({
 
 function EditableAnswer({
   answer,
-  answers,
+  answersData,
   question,
   questionDocRef,
   onTextChange
 }: {
   answer: Omit<Answer, 'ref'>;
-  answers: Answer[];
+  answersData: Answer[];
   question: Question;
   questionDocRef: DocumentReference | null;
   onTextChange: (answerId: string, newText: string) => void;
@@ -344,22 +349,26 @@ function EditableAnswer({
   );
   
   const handleSetCorrect = async () => {
-     if (!questionDocRef || !firestore || !answers || !answerDocRef) return;
+     if (!questionDocRef || !firestore || !answersData || !answerDocRef) return;
 
       const batch = writeBatch(firestore);
       
       batch.update(questionDocRef, { correctAnswerId: answer.id });
 
-      answers.forEach(ans => {
+      answersData.forEach(ans => {
         const otherAnswerRef = doc(firestore, `${questionDocRef.path}/answers/${ans.id}`);
         if (ans.id === answer.id) {
-           batch.update(otherAnswerRef, { isCorrect: true });
+           if(!ans.isCorrect) batch.update(otherAnswerRef, { isCorrect: true });
         } else if (ans.isCorrect) {
            batch.update(otherAnswerRef, { isCorrect: false });
         }
       });
       
-      await batch.commit().catch(e => console.error("Failed to set correct answer", e));
+      try {
+        await batch.commit();
+      } catch(e) {
+        console.error("Failed to set correct answer", e);
+      }
   };
 
   const handleDeleteAnswer = () => {
