@@ -527,6 +527,6 @@ function QuestionDisplay({
 }
 
 
-export default function QuizPage({ params }: { params: { quizId: string } }) {
-  return <QuizClientView quizId={params.quizId} />;
+export default function QuizPage({ params: { quizId } }: { params: { quizId: string } }) {
+  return <QuizClientView quizId={quizId} />;
 }
