@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   useFirestore,
   useDoc,
@@ -123,9 +123,6 @@ function QuizClientView({ quizId }: { quizId: string }) {
   );
 }
 
-export default function QuizPage({ params }: { params: { quizId: string } }) {
-  return <QuizClientView quizId={params.quizId} />;
-}
 
 
 function EditableQuizHeader({ quiz, quizRef }: { quiz: Quiz, quizRef: DocumentReference | null }) {
@@ -220,11 +217,12 @@ function EditableQuestion({
   
   const [isSaving, setIsSaving] = useState(false);
 
-  const originalAnswersJSON = useMemoFirebase(() => JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []), [answersData]);
+  const originalAnswersJSON = useMemo(() => JSON.stringify(answersData?.map(({ ref, ...rest }) => rest) || []), [answersData]);
   
-  const hasChanges =
-    question.text !== questionText ||
-    originalAnswersJSON !== JSON.stringify(localAnswers.map(({ ref, ...rest }) => rest));
+  const hasChanges = useMemo(() => {
+    const currentAnswersJSON = JSON.stringify(localAnswers.map(({ ref, ...rest }) => rest));
+    return question.text !== questionText || originalAnswersJSON !== currentAnswersJSON;
+  }, [question.text, questionText, originalAnswersJSON, localAnswers]);
 
 
   const handleQuestionSave = async () => {
@@ -526,4 +524,9 @@ function QuestionDisplay({
       </CardContent>
     </Card>
   );
+}
+
+
+export default function QuizPage({ params }: { params: { quizId: string } }) {
+  return <QuizClientView quizId={params.quizId} />;
 }
