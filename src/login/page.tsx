@@ -72,6 +72,7 @@ export default function LoginPage() {
             email: userCredential.user.email || '',
             userType: userType,
             totalXp: 0,
+            bio: 'Welcome to my BhashaSTEM profile!',
        }, { merge: true });
       
       // This is a temporary client-side solution for role-based UI

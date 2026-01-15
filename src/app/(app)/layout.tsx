@@ -9,6 +9,7 @@ import {
   Library,
   MessageCircle,
   Sparkles,
+  Search,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -31,6 +32,11 @@ const navItems = [
     href: '/dashboard',
     icon: LayoutDashboard,
     label: 'Dashboard',
+  },
+  {
+    href: '/search',
+    icon: Search,
+    label: 'Search Users',
   },
   {
     href: '/library',
@@ -104,7 +110,7 @@ function AppNavigation({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href} passHref>
                   <SidebarMenuButton
-                    isActive={pathname === item.href}
+                    isActive={pathname.startsWith(item.href)}
                     tooltip={{ children: item.label }}
                     as="a"
                   >

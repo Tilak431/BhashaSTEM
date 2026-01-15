@@ -27,6 +27,10 @@
         "totalXp": {
           "type": "number",
           "description": "The total experience points the user has accumulated."
+        },
+        "bio": {
+          "type": "string",
+          "description": "A short biography of the user."
         }
       },
       "required": [
@@ -36,6 +40,24 @@
         "email",
         "totalXp"
       ]
+    },
+    "Follow": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Follow",
+        "type": "object",
+        "description": "Represents a follow relationship. The document ID is the UID of the followed/following user.",
+        "properties": {
+            "userId": {
+                "type": "string",
+                "description": "The UID of the user being followed or the user who is following."
+            },
+            "followedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp of when the follow action occurred."
+            }
+        },
+        "required": ["userId", "followedAt"]
     },
     "ClassSection": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -253,11 +275,51 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user profiles. Accessible only by the user and administrators.",
+          "description": "Stores user profiles. Accessible by all authenticated users.",
           "params": [
             {
               "name": "userId",
               "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+       {
+        "path": "/users/{userId}/followers/{followerId}",
+        "definition": {
+          "entityName": "Follow",
+          "schema": {
+            "$ref": "#/backend/entities/Follow"
+          },
+          "description": "A list of users who are following the user at {userId}.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The user being followed."
+            },
+            {
+              "name": "followerId",
+              "description": "The user who is following."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/following/{followingId}",
+        "definition": {
+          "entityName": "Follow",
+          "schema": {
+            "$ref": "#/backend/entities/Follow"
+          },
+          "description": "A list of users that the user at {userId} is following.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The user who is following."
+            },
+            {
+              "name": "followingId",
+              "description": "The user being followed."
             }
           ]
         }
