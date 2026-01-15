@@ -16,6 +16,7 @@ import {
   writeBatch,
   DocumentReference,
   Query,
+  getDocs,
 } from 'firebase/firestore';
 import {
   Card,
@@ -489,51 +490,55 @@ function QuestionDisplay({
     () => (firestore ? collection(question.ref, 'answers') : null),
     [firestore, question.ref]
   );
-  const { data: answers, isLoading: areAnswersLoading } =
+  const { data: answersData, isLoading: areAnswersLoading } =
     useCollection<Omit<Answer, 'ref'>>(answersRef);
 
   const [translatedContent, setTranslatedContent] = useState<TranslatedContent | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
 
   const translateContent = useCallback(async (lang: Language, qText: string, ans: Omit<Answer, 'ref'>[]) => {
+    const originalAnswers: {[id: string]: string} = {};
+    ans.forEach(a => originalAnswers[a.id] = a.text);
+    const originalContent = { questionText: qText, answers: originalAnswers };
+
     if (lang === 'English') {
-      const answersText: {[id: string]: string} = {};
-      ans.forEach(a => answersText[a.id] = a.text);
-      setTranslatedContent({ questionText: qText, answers: answersText });
+      setTranslatedContent(originalContent);
       return;
     }
     
     setIsTranslating(true);
     try {
-      const questionPromise = translateText({ text: qText, targetLanguage: lang });
-      const answerPromises = ans.map(a => translateText({ text: a.text, targetLanguage: lang }).then(res => ({ id: a.id, text: res.translatedText })));
+      const answersToTranslate = ans.map(a => ({ id: a.id, text: a.text }));
+      const result = await translateText({
+        question: qText,
+        answers: answersToTranslate,
+        targetLanguage: lang,
+      });
 
-      const [translatedQuestion, ...translatedAnswers] = await Promise.all([questionPromise, ...answerPromises]);
-
-      const answersText: {[id: string]: string} = {};
-      (translatedAnswers as {id: string, text: string}[]).forEach(a => answersText[a.id] = a.text);
+      const translatedAnswers: {[id: string]: string} = {};
+      result.translatedAnswers.forEach(a => {
+        translatedAnswers[a.id] = a.text;
+      });
 
       setTranslatedContent({
-        questionText: translatedQuestion.translatedText,
-        answers: answersText,
+        questionText: result.translatedQuestion,
+        answers: translatedAnswers,
       });
 
     } catch (e) {
       console.error("Translation failed", e);
-      // Fallback to English
-       const answersText: {[id: string]: string} = {};
-       ans.forEach(a => answersText[a.id] = a.text);
-       setTranslatedContent({ questionText: qText, answers: answersText });
+      // Fallback to English on failure
+       setTranslatedContent(originalContent);
     } finally {
       setIsTranslating(false);
     }
   }, []);
 
   useEffect(() => {
-    if (question.text && answers) {
-      translateContent(language, question.text, answers);
+    if (question.text && answersData) {
+      translateContent(language, question.text, answersData);
     }
-  }, [language, question.text, answers, translateContent]);
+  }, [language, question.text, answersData, translateContent]);
 
 
   return (
@@ -553,7 +558,7 @@ function QuestionDisplay({
             disabled={submitted}
             className="space-y-2"
           >
-            {answers?.map(answer => {
+            {answersData?.map(answer => {
               const isSelected = selectedAnswer === answer.id;
               const isCorrectAnswer = answer.id === question.correctAnswerId;
               const answerText = translatedContent?.answers[answer.id] || answer.text;
