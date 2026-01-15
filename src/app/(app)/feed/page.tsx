@@ -10,7 +10,6 @@ import {
   WithId,
   updateDocumentNonBlocking,
   deleteDocumentNonBlocking,
-  setDocumentNonBlocking,
   useDoc,
 } from '@/firebase';
 import {
@@ -22,6 +21,7 @@ import {
   writeBatch,
   increment,
   runTransaction,
+  getDocs,
 } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useForm, useFormState } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -59,7 +59,18 @@ import Link from 'next/link';
 import { useState, useMemo, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
-import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
 
 interface Post {
   userId: string;
@@ -159,13 +170,13 @@ function PostComments({ postId }: { postId: string }) {
     const postRef = doc(firestore, 'posts', postId);
     const commentsRef = collection(postRef, 'comments');
     
-    await addDocumentNonBlocking(commentsRef, {
+    addDocumentNonBlocking(commentsRef, {
       userId: user.uid,
       content: comment,
       createdAt: serverTimestamp(),
     });
 
-    await updateDocumentNonBlocking(postRef, {
+    updateDocumentNonBlocking(postRef, {
         commentCount: increment(1)
     });
 
@@ -207,6 +218,7 @@ function PostCard({ post }: { post: WithId<Post> }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const [showComments, setShowComments] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const likeRef = useMemoFirebase(
     () =>
@@ -224,14 +236,12 @@ function PostCard({ post }: { post: WithId<Post> }) {
 
     try {
       await runTransaction(firestore, async transaction => {
-        const likeDoc = await transaction.get(likeRef);
+        const remoteLikeDoc = await transaction.get(likeRef);
         
-        if (likeDoc.exists()) {
-          // User has liked the post, so unlike it.
+        if (remoteLikeDoc.exists()) {
           transaction.update(postRef, { likeCount: increment(-1) });
           transaction.delete(likeRef);
         } else {
-          // User has not liked the post, so like it.
           transaction.update(postRef, { likeCount: increment(1) });
           transaction.set(likeRef, { userId: user.uid });
         }
@@ -240,6 +250,40 @@ function PostCard({ post }: { post: WithId<Post> }) {
       console.error("Transaction failed: ", e);
     }
   };
+
+  const handleDelete = async () => {
+      if (!user || user.uid !== post.userId || !firestore) return;
+      setIsDeleting(true);
+
+      const postRef = doc(firestore, "posts", post.id);
+      
+      try {
+        const batch = writeBatch(firestore);
+
+        // Delete comments subcollection
+        const commentsRef = collection(postRef, 'comments');
+        const commentsSnapshot = await getDocs(commentsRef);
+        commentsSnapshot.forEach((commentDoc) => {
+            batch.delete(commentDoc.ref);
+        });
+
+        // Delete likes subcollection
+        const likesRef = collection(postRef, 'likes');
+        const likesSnapshot = await getDocs(likesRef);
+        likesSnapshot.forEach((likeDoc) => {
+            batch.delete(likeDoc.ref);
+        });
+
+        // Delete the post itself
+        batch.delete(postRef);
+
+        await batch.commit();
+
+      } catch(e) {
+        console.error("Error deleting post:", e);
+        setIsDeleting(false);
+      }
+  }
 
   const timeAgo = post.createdAt
     ? formatDistanceToNow(new Date(post.createdAt.seconds * 1000), {
@@ -252,14 +296,39 @@ function PostCard({ post }: { post: WithId<Post> }) {
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <PostAuthor userId={post.userId} />
-          <p className="text-xs text-muted-foreground">{timeAgo}</p>
+           <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">{timeAgo}</p>
+            {user && user.uid === post.userId && (
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" disabled={isDeleting}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete your post.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                          {isDeleting ? <Loader2 className="animate-spin" /> : "Delete"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
+           </div>
         </div>
       </CardHeader>
       <CardContent>
         {post.content && <p className="text-sm whitespace-pre-wrap">{post.content}</p>}
         {post.imageUrl && (
-            <div className="mt-4 relative aspect-video rounded-lg overflow-hidden border">
-                <Image src={post.imageUrl} alt="Post image" layout="fill" objectFit="cover" />
+            <div className="mt-4 relative w-full rounded-lg overflow-hidden border">
+                <Image src={post.imageUrl} alt="Post image" width={0} height={0} sizes="100vw" style={{ width: '100%', height: 'auto' }} className="object-contain" />
             </div>
         )}
       </CardContent>
@@ -336,7 +405,7 @@ function CreatePost() {
     }
 
     const postsRef = collection(firestore, 'posts');
-    await addDocumentNonBlocking(postsRef, {
+    addDocumentNonBlocking(postsRef, {
       userId: user.uid,
       content: values.content,
       imageUrl: imageDataUri,
@@ -377,8 +446,8 @@ function CreatePost() {
               )}
             />
             {imagePreview && (
-                 <div className="relative w-full aspect-video">
-                    <Image src={imagePreview} alt="Image preview" layout="fill" className="rounded-md object-cover" />
+                 <div className="relative w-full">
+                    <Image src={imagePreview} alt="Image preview" width={0} height={0} sizes="100vw" style={{ width: '100%', height: 'auto' }} className="rounded-md object-contain" />
                     <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-6 w-6" onClick={removeImage}>
                         <X className="h-4 w-4" />
                     </Button>
@@ -438,5 +507,3 @@ export default function FeedPage() {
     </div>
   );
 }
-
-    
