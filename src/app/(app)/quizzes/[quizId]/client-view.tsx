@@ -19,6 +19,7 @@ import {
   Query,
   getDocs,
   serverTimestamp,
+  increment,
 } from 'firebase/firestore';
 import {
   Card,
@@ -411,6 +412,7 @@ function StudentView({
   const [selectedLanguage, setSelectedLanguage] = useState<Language>('English');
   const firestore = useFirestore();
   const { user } = useUser();
+  const [startTime, setStartTime] = useState(Date.now());
 
 
   const handleAnswerChange = (questionId: string, answerId: string) => {
@@ -426,6 +428,10 @@ function StudentView({
         newScore++;
       }
     });
+    
+    const timeTaken = (Date.now() - startTime) / 1000; // in seconds
+    const xpGained = newScore * 10; // 10 XP per correct answer
+
     setScore(newScore);
     setSubmitted(true);
     
@@ -436,6 +442,13 @@ function StudentView({
         score: newScore,
         totalQuestions: questions.length,
         submissionDateTime: serverTimestamp(),
+        timeTaken,
+        xpGained
+    });
+
+    const userProfileRef = doc(firestore, 'users', user.uid);
+    updateDocumentNonBlocking(userProfileRef, {
+        totalXp: increment(xpGained)
     });
   };
 

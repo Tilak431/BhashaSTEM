@@ -23,13 +23,18 @@
           "type": "string",
           "description": "User's email address.",
           "format": "email"
+        },
+        "totalXp": {
+          "type": "number",
+          "description": "The total experience points the user has accumulated."
         }
       },
       "required": [
         "id",
         "userType",
         "name",
-        "email"
+        "email",
+        "totalXp"
       ]
     },
     "ClassSection": {
@@ -181,6 +186,14 @@
           "type": "string",
           "description": "Date and time when the quiz was submitted.",
           "format": "date-time"
+        },
+        "timeTaken": {
+          "type": "number",
+          "description": "The time in seconds it took the student to complete the quiz."
+        },
+        "xpGained": {
+          "type": "number",
+          "description": "The amount of experience points gained from this quiz."
         }
       },
       "required": [
@@ -189,7 +202,9 @@
         "quizId",
         "score",
         "totalQuestions",
-        "submissionDateTime"
+        "submissionDateTime",
+        "timeTaken",
+        "xpGained"
       ]
     },
     "StudentAnswer": {
