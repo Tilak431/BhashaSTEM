@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Leaf, LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -30,6 +31,7 @@ export function Header() {
   }, [])
 
   const handleLogout = async () => {
+    if (!auth) return;
     await signOut(auth);
     localStorage.removeItem('userType');
     localStorage.removeItem('userName');
@@ -62,9 +64,11 @@ export function Header() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              <span>Profile</span>
+            <DropdownMenuItem asChild>
+              <Link href="/profile">
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Settings className="mr-2 h-4 w-4" />
