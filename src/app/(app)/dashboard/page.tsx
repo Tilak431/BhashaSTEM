@@ -143,8 +143,10 @@ export default function DashboardPage() {
     return query(collection(firestore, 'users', user.uid, 'studentQuizResults'), orderBy('submissionDateTime', 'desc'));
   }, [firestore, user]);
 
+  const userProfileRef = useMemoFirebase(() => (user ? doc(firestore, 'users', user.uid) : null), [user, firestore]);
+
   const { data: quizHistory, isLoading: isHistoryLoading } = useCollection<StudentQuizResult>(resultsQuery);
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc(user ? doc(firestore, 'users', user.uid) : null);
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
   const progressData = processProgressData(quizHistory);
   const isLoading = isHistoryLoading || isProfileLoading;

@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect } from 'react';
 import {
@@ -322,8 +323,8 @@ export default function QuizzesPage() {
             isOpen={isCreateDialogOpen}
             onClose={() => setIsCreateDialogOpen(false)}
             quizzesRef={
-              quizzesQuery
-                ? collection(firestore!, 'classSections/IS-B/quizzes')
+              firestore
+                ? collection(firestore, 'classSections/IS-B/quizzes')
                 : null
             }
           />

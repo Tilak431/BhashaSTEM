@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -118,7 +119,7 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   const { user: currentUser, isUserLoading: isAuthLoading } = useUser();
   const firestore = useFirestore();
 
-  const profileUserId = profileUserIdProp ?? currentUser?.uid;
+  const profileUserId = useMemo(() => profileUserIdProp ?? currentUser?.uid, [profileUserIdProp, currentUser?.uid]);
 
   const isOwnProfile = !profileUserIdProp || profileUserIdProp === currentUser?.uid;
 
