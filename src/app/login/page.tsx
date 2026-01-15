@@ -14,9 +14,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/firebase';
+import { useAuth, setDocumentNonBlocking } from '@/firebase';
 import { signInAnonymously, updateProfile } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
+import { doc } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
 
 const TEACHER_KEY = 'teacher-secret-key';
 const STUDENT_KEY = 'student-access-key';
@@ -24,6 +26,7 @@ const STUDENT_KEY = 'student-access-key';
 export default function LoginPage() {
   const router = useRouter();
   const auth = useAuth();
+  const firestore = useFirestore();
   const [name, setName] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [error, setError] = useState('');
@@ -39,8 +42,8 @@ export default function LoginPage() {
       return;
     }
     
-    if (!auth) {
-        setError('Auth service is not available. Please try again later.');
+    if (!auth || !firestore) {
+        setError('Auth or Firestore service is not available. Please try again later.');
         setLoading(false);
         return;
     }
@@ -59,6 +62,17 @@ export default function LoginPage() {
     try {
       const userCredential = await signInAnonymously(auth);
       await updateProfile(userCredential.user, { displayName: name });
+      
+      // Create user profile document
+       const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+       setDocumentNonBlocking(userDocRef, {
+            id: userCredential.user.uid,
+            name: name,
+            email: userCredential.user.email || '',
+            userType: userType,
+            totalXp: 0,
+            bio: 'Welcome to my BhashaSTEM profile!',
+       }, { merge: true });
       
       // This is a temporary client-side solution for role-based UI
       localStorage.setItem('userType', userType);
