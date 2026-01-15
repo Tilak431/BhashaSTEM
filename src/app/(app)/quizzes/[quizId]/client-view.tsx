@@ -206,7 +206,7 @@ function TeacherView({
   const handleAddQuestion = () => {
     if (!questionsRef) return;
     const newQuestionText: LocalizedText = languages.reduce(
-      (acc, lang) => ({ ...acc, [lang]: 'New Question' }),
+      (acc, lang) => ({ ...acc, [lang]: `New Question in ${lang}` }),
       {}
     );
     addDocumentNonBlocking(questionsRef, {
@@ -263,33 +263,32 @@ function EditableQuestion({
       setLocalAnswers(
         answersData.map(a => ({
           ...a,
+          text: a.text || {},
           ref: doc(firestore, question.ref.path, 'answers', a.id),
         }))
       );
     }
   }, [answersData, firestore, question.ref]);
 
+
   const [isSaving, setIsSaving] = useState(false);
 
-  const originalAnswersJSON = useMemo(
-    () => JSON.stringify(answersData?.map(({ ...rest }) => rest) || []),
-    [answersData]
-  );
-  const originalQuestionJSON = useMemo(() => JSON.stringify(question.text || {}), [question.text]);
+  const originalState = useMemo(() => {
+    return {
+      questionText: JSON.stringify(question.text || {}),
+      answers: JSON.stringify((answersData || []).map(a => ({...a, text: a.text || {}})))
+    }
+  }, [question.text, answersData]);
 
 
   const hasChanges = useMemo(() => {
-    if (!answersData) return false;
-    const currentAnswersJSON = JSON.stringify(
-      localAnswers.map(({ ref, ...rest }) => rest)
-    );
-    const currentQuestionJSON = JSON.stringify(questionText);
+    const currentState = {
+      questionText: JSON.stringify(questionText),
+      answers: JSON.stringify(localAnswers.map(({ ref, ...rest }) => rest))
+    };
+    return currentState.questionText !== originalState.questionText || currentState.answers !== originalState.answers;
+  }, [questionText, localAnswers, originalState]);
 
-    return (
-      originalQuestionJSON !== currentQuestionJSON ||
-      originalAnswersJSON !== currentAnswersJSON
-    );
-  }, [originalQuestionJSON, questionText, originalAnswersJSON, localAnswers, answersData]);
 
   const handleQuestionTextChange = (lang: Language, text: string) => {
     setQuestionText(prev => ({ ...prev, [lang]: text }));
@@ -307,10 +306,8 @@ function EditableQuestion({
 
     localAnswers.forEach(localAns => {
       const originalAns = answersData.find(a => a.id === localAns.id);
-      if (originalAns && JSON.stringify(originalAns.text || {}) !== JSON.stringify(localAns.text)) {
-        if (localAns.ref) {
+       if (localAns.ref && (!originalAns || JSON.stringify(originalAns.text || {}) !== JSON.stringify(localAns.text))) {
           batch.update(localAns.ref, { text: localAns.text });
-        }
       }
     });
 
@@ -337,7 +334,7 @@ function EditableQuestion({
   const handleAddAnswer = () => {
     if (answersRef) {
        const newAnswerText: LocalizedText = languages.reduce(
-        (acc, lang) => ({ ...acc, [lang]: 'New Answer' }),
+        (acc, lang) => ({ ...acc, [lang]: `New Answer in ${lang}` }),
         {}
       );
       addDocumentNonBlocking(answersRef, { text: newAnswerText, isCorrect: false });
@@ -636,8 +633,8 @@ function QuestionDisplay({
     useCollection<Omit<Answer, 'ref'>>(answersRef);
 
   const getLocalizedText = (textObj: LocalizedText | undefined, lang: Language) => {
-    const text = textObj || {};
-    return text[lang] || text['English'] || "Text not available.";
+    if (!textObj) return "Text not available.";
+    return textObj[lang] || textObj['English'] || "Text not available.";
   }
 
   const questionText = getLocalizedText(question.text, language);
