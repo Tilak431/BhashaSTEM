@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Sparkles,
   Search,
+  Rss,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -32,6 +33,11 @@ const navItems = [
     href: '/dashboard',
     icon: LayoutDashboard,
     label: 'Dashboard',
+  },
+  {
+    href: '/feed',
+    icon: Rss,
+    label: 'Feed',
   },
   {
     href: '/search',
@@ -139,3 +145,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </FirebaseClientProvider>
   );
 }
+
+    
