@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   useFirestore,
   useDoc,
@@ -47,20 +47,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-type LocalizedText = { [key in Language]?: string };
+import { translateText } from '@/ai/flows/translate-text';
 
 interface Answer {
   id: string;
-  text: LocalizedText;
+  text: string;
   isCorrect: boolean;
   ref: DocumentReference;
 }
 
 interface Question {
   id: string;
-  text: LocalizedText;
+  text: string;
   correctAnswerId?: string;
   ref: DocumentReference;
   answers: Answer[];
@@ -205,12 +203,8 @@ function TeacherView({
 }) {
   const handleAddQuestion = () => {
     if (!questionsRef) return;
-    const newQuestionText: LocalizedText = languages.reduce(
-      (acc, lang) => ({ ...acc, [lang]: `New Question in ${lang}` }),
-      {}
-    );
     addDocumentNonBlocking(questionsRef, {
-      text: newQuestionText,
+      text: 'New Question',
       correctAnswerId: null,
     });
   };
@@ -236,303 +230,169 @@ function EditableQuestion({
   question: Omit<Question, 'answers'> & { ref: DocumentReference };
   index: number;
 }) {
-  const firestore = useFirestore();
-  const [questionText, setQuestionText] = useState(
-    question.text || {}
-  );
+  const [questionText, setQuestionText] = useState(question.text || '');
 
-  const questionDocRef = useMemoFirebase(
-    () => (firestore ? question.ref : null),
-    [firestore, question.ref]
-  );
-
-  const answersRef = useMemoFirebase(
-    () => (questionDocRef ? collection(questionDocRef, 'answers') : null),
-    [questionDocRef]
-  );
-
-  const { data: answersData, isLoading: areAnswersLoading } =
-    useCollection<Omit<Answer, 'ref'>>(answersRef);
-
-  const [localAnswers, setLocalAnswers] = useState<
-    (Omit<Answer, 'ref'> & { ref?: DocumentReference })[]
-  >([]);
-
-  useEffect(() => {
-    if (answersData && firestore) {
-      setLocalAnswers(
-        answersData.map(a => ({
-          ...a,
-          text: a.text || {},
-          ref: doc(firestore, question.ref.path, 'answers', a.id),
-        }))
-      );
-    }
-  }, [answersData, firestore, question.ref]);
-
-
-  const [isSaving, setIsSaving] = useState(false);
-
-  const originalState = useMemo(() => {
-    return {
-      questionText: JSON.stringify(question.text || {}),
-      answers: JSON.stringify((answersData || []).map(a => ({...a, text: a.text || {}})))
-    }
-  }, [question.text, answersData]);
-
-
-  const hasChanges = useMemo(() => {
-    const currentState = {
-      questionText: JSON.stringify(questionText),
-      answers: JSON.stringify(localAnswers.map(({ ref, ...rest }) => rest))
-    };
-    return currentState.questionText !== originalState.questionText || currentState.answers !== originalState.answers;
-  }, [questionText, localAnswers, originalState]);
-
-
-  const handleQuestionTextChange = (lang: Language, text: string) => {
-    setQuestionText(prev => ({ ...prev, [lang]: text }));
-  }
-
-  const handleQuestionSave = async () => {
-    if (!questionDocRef || !firestore || !answersData) return;
-    setIsSaving(true);
-
-    const batch = writeBatch(firestore);
-
-    if (JSON.stringify(question.text || {}) !== JSON.stringify(questionText)) {
-      batch.update(questionDocRef, { text: questionText });
-    }
-
-    localAnswers.forEach(localAns => {
-      const originalAns = answersData.find(a => a.id === localAns.id);
-       if (localAns.ref && (!originalAns || JSON.stringify(originalAns.text || {}) !== JSON.stringify(localAns.text))) {
-          batch.update(localAns.ref, { text: localAns.text });
-      }
-    });
-
-    try {
-      await batch.commit();
-    } catch (e) {
-      console.error('Failed to save question', e);
-    } finally {
-      setIsSaving(false);
+  const handleBlur = () => {
+    if (question.text !== questionText) {
+      updateDocumentNonBlocking(question.ref, { text: questionText });
     }
   };
 
   const handleQuestionDelete = () => {
-    if (questionDocRef) {
-      localAnswers?.forEach(ans => {
-        if (ans.ref) {
-          deleteDocumentNonBlocking(ans.ref);
-        }
+    // Also delete sub-collection of answers
+    getDocs(collection(question.ref, 'answers')).then(snapshot => {
+      snapshot.forEach(doc => {
+        deleteDocumentNonBlocking(doc.ref);
       });
-      deleteDocumentNonBlocking(questionDocRef);
-    }
-  };
-
-  const handleAddAnswer = () => {
-    if (answersRef) {
-       const newAnswerText: LocalizedText = languages.reduce(
-        (acc, lang) => ({ ...acc, [lang]: `New Answer in ${lang}` }),
-        {}
-      );
-      addDocumentNonBlocking(answersRef, { text: newAnswerText, isCorrect: false });
-    }
-  };
-
-  const handleAnswerTextChange = (answerId: string, lang: Language, newText: string) => {
-    setLocalAnswers(prev =>
-      prev.map(ans =>
-        ans.id === answerId
-          ? { ...ans, text: { ...ans.text, [lang]: newText } }
-          : ans
-      )
-    );
+    });
+    deleteDocumentNonBlocking(question.ref);
   };
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-4">
-          <Label
-            htmlFor={`q-${question.id}`}
-            className="text-lg font-semibold"
-          >
+          <Label htmlFor={`q-${question.id}`} className="text-lg font-semibold">
             Question {index + 1}
           </Label>
-           <Button
+          <Input
+            id={`q-${question.id}`}
+            value={questionText}
+            onChange={e => setQuestionText(e.target.value)}
+            onBlur={handleBlur}
+            className="flex-1"
+          />
+          <Button
             variant="ghost"
             size="icon"
             onClick={handleQuestionDelete}
             aria-label="Delete question"
-            disabled={!questionDocRef}
-            className="ml-auto"
           >
             <Trash2 className="h-5 w-5 text-destructive" />
           </Button>
         </div>
-         <Tabs defaultValue={languages[0]} className="w-full">
-            <TabsList>
-              {languages.map(lang => (
-                <TabsTrigger key={lang} value={lang}>{lang}</TabsTrigger>
-              ))}
-            </TabsList>
-            {languages.map(lang => (
-              <TabsContent key={lang} value={lang}>
-                <Input
-                  id={`q-${question.id}-${lang}`}
-                  value={questionText[lang] || ''}
-                  onChange={e => handleQuestionTextChange(lang, e.target.value)}
-                  className="flex-1"
-                  disabled={!questionDocRef}
-                  placeholder={`Question text in ${lang}`}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
-
       </CardHeader>
-      <CardContent className="space-y-4 pl-12">
-        {areAnswersLoading ? (
-          <Loader2 className="animate-spin" />
-        ) : (
-          (localAnswers || []).map(answer => (
-            <EditableAnswer
-              key={answer.id}
-              answer={answer}
-              localAnswers={localAnswers}
-              question={question}
-              questionDocRef={questionDocRef}
-              onTextChange={handleAnswerTextChange}
-            />
-          ))
-        )}
-        {(!answersData || answersData.length < 5) && (
-          <Button
-            onClick={handleAddAnswer}
-            variant="ghost"
-            size="sm"
-            disabled={!answersRef}
-          >
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
-          </Button>
-        )}
+      <CardContent>
+        <EditableAnswersList question={question} />
       </CardContent>
-      <CardFooter className="justify-end">
-        <Button onClick={handleQuestionSave} disabled={isSaving || !hasChanges}>
-          {isSaving ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 h-4 w-4" />
-          )}
-          Save Question
-        </Button>
-      </CardFooter>
     </Card>
+  );
+}
+
+function EditableAnswersList({
+  question,
+}: {
+  question: Omit<Question, 'answers'> & { ref: DocumentReference };
+}) {
+  const firestore = useFirestore();
+  const answersRef = useMemoFirebase(
+    () => (firestore ? collection(question.ref, 'answers') : null),
+    [firestore, question.ref]
+  );
+  const { data: answers, isLoading } = useCollection<Omit<Answer, 'ref'>>(answersRef);
+
+  const handleAddAnswer = () => {
+    if (answersRef) {
+      addDocumentNonBlocking(answersRef, { text: 'New Answer', isCorrect: false });
+    }
+  };
+
+  if (isLoading) {
+    return <Loader2 className="animate-spin" />;
+  }
+
+  return (
+    <div className="space-y-4 pl-12">
+      {(answers || []).map(answer => (
+        <EditableAnswer
+          key={answer.id}
+          answer={{...answer, ref: doc(answersRef!.firestore, answersRef!.path, answer.id)}}
+          question={question}
+          allAnswers={answers || []}
+        />
+      ))}
+      {(answers || []).length < 5 && (
+        <Button onClick={handleAddAnswer} variant="ghost" size="sm">
+          <PlusCircle className="mr-2 h-4 w-4" /> Add Answer
+        </Button>
+      )}
+    </div>
   );
 }
 
 function EditableAnswer({
   answer,
-  localAnswers,
   question,
-  questionDocRef,
-  onTextChange,
+  allAnswers
 }: {
-  answer: Omit<Answer, 'ref'> & { ref?: DocumentReference };
-  localAnswers: (Omit<Answer, 'ref'> & { ref?: DocumentReference })[];
+  answer: Answer;
   question: Omit<Question, 'answers'> & { ref: DocumentReference };
-  questionDocRef: DocumentReference | null;
-  onTextChange: (answerId: string, lang: Language, newText: string) => void;
+  allAnswers: Omit<Answer, 'ref'>[]
 }) {
   const firestore = useFirestore();
+  const [answerText, setAnswerText] = useState(answer.text || '');
 
-  const answerDocRef = useMemoFirebase(
-    () => (answer.ref ? answer.ref : null),
-    [answer.ref]
-  );
+  const handleBlur = () => {
+    if (answer.text !== answerText) {
+      updateDocumentNonBlocking(answer.ref, { text: answerText });
+    }
+  };
 
   const handleSetCorrect = async () => {
-    if (!questionDocRef || !firestore || !localAnswers || !answerDocRef) return;
-
+    if (!firestore) return;
     const batch = writeBatch(firestore);
+    
+    // Set this answer as correct
+    batch.update(answer.ref, { isCorrect: true });
+    // Set this as the correct answer ID on the question
+    batch.update(question.ref, { correctAnswerId: answer.id });
 
-    batch.update(questionDocRef, { correctAnswerId: answer.id });
-
-    localAnswers.forEach(ans => {
-      if (ans.ref) {
-        if (ans.id === answer.id) {
-          if (!(ans as Answer).isCorrect) batch.update(ans.ref, { isCorrect: true });
-        } else if ((ans as Answer).isCorrect) {
-          batch.update(ans.ref, { isCorrect: false });
-        }
+    // Set all other answers for this question to incorrect
+    allAnswers.forEach(ans => {
+      if (ans.id !== answer.id) {
+        const otherAnswerRef = doc(answer.ref.parent, ans.id);
+        batch.update(otherAnswerRef, { isCorrect: false });
       }
     });
 
-    try {
-      await batch.commit();
-    } catch (e) {
-      console.error('Failed to set correct answer', e);
-    }
+    await batch.commit();
   };
 
-  const handleDeleteAnswer = () => {
-    if (answerDocRef) {
-      if (question.correctAnswerId === answer.id && questionDocRef) {
-        updateDocumentNonBlocking(questionDocRef, { correctAnswerId: null });
-      }
-      deleteDocumentNonBlocking(answerDocRef);
-    }
-  };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Button
-          variant={question.correctAnswerId === answer.id ? 'default' : 'outline'}
-          size="icon"
-          onClick={handleSetCorrect}
-          disabled={!answerDocRef || !questionDocRef}
-          aria-label="Set as correct answer"
-        >
-          <Check className="h-4 w-4" />
-        </Button>
-         <div className="flex-1 text-sm text-muted-foreground">Answer Option</div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleDeleteAnswer}
-          aria-label="Delete answer"
-          disabled={!answerDocRef}
-        >
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
-      </div>
-
-       <Tabs defaultValue={languages[0]} className="w-full pl-12">
-            <TabsList>
-              {languages.map(lang => (
-                <TabsTrigger key={lang} value={lang}>{lang}</TabsTrigger>
-              ))}
-            </TabsList>
-            {languages.map(lang => (
-              <TabsContent key={lang} value={lang}>
-                  <Input
-                    value={(answer.text || {})[lang] || ''}
-                    onChange={e => onTextChange(answer.id, lang, e.target.value)}
-                    disabled={!answerDocRef}
-                    placeholder={`Answer text in ${lang}`}
-                  />
-              </TabsContent>
-            ))}
-        </Tabs>
-
+    <div className="flex items-center gap-2">
+      <Button
+        variant={answer.isCorrect ? 'default' : 'outline'}
+        size="icon"
+        onClick={handleSetCorrect}
+        aria-label="Set as correct answer"
+      >
+        <Check className="h-4 w-4" />
+      </Button>
+      <Input
+        value={answerText}
+        onChange={e => setAnswerText(e.target.value)}
+        onBlur={handleBlur}
+      />
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => deleteDocumentNonBlocking(answer.ref)}
+        aria-label="Delete answer"
+      >
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
     </div>
   );
 }
 
+
 // --- Student View ---
+type TranslatedContent = {
+  questionText: string;
+  answers: { [answerId: string]: string };
+};
+
 function StudentView({
   questions,
 }: {
@@ -632,22 +492,59 @@ function QuestionDisplay({
   const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Omit<Answer, 'ref'>>(answersRef);
 
-  const getLocalizedText = (textObj: LocalizedText | undefined, lang: Language) => {
-    if (!textObj) return "Text not available.";
-    return textObj[lang] || textObj['English'] || "Text not available.";
-  }
+  const [translatedContent, setTranslatedContent] = useState<TranslatedContent | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
 
-  const questionText = getLocalizedText(question.text, language);
+  const translateContent = useCallback(async (lang: Language, qText: string, ans: Omit<Answer, 'ref'>[]) => {
+    if (lang === 'English') {
+      const answersText: {[id: string]: string} = {};
+      ans.forEach(a => answersText[a.id] = a.text);
+      setTranslatedContent({ questionText: qText, answers: answersText });
+      return;
+    }
+    
+    setIsTranslating(true);
+    try {
+      const questionPromise = translateText({ text: qText, targetLanguage: lang });
+      const answerPromises = ans.map(a => translateText({ text: a.text, targetLanguage: lang }).then(res => ({ id: a.id, text: res.translatedText })));
+
+      const [translatedQuestion, ...translatedAnswers] = await Promise.all([questionPromise, ...answerPromises]);
+
+      const answersText: {[id: string]: string} = {};
+      (translatedAnswers as {id: string, text: string}[]).forEach(a => answersText[a.id] = a.text);
+
+      setTranslatedContent({
+        questionText: translatedQuestion.translatedText,
+        answers: answersText,
+      });
+
+    } catch (e) {
+      console.error("Translation failed", e);
+      // Fallback to English
+       const answersText: {[id: string]: string} = {};
+       ans.forEach(a => answersText[a.id] = a.text);
+       setTranslatedContent({ questionText: qText, answers: answersText });
+    } finally {
+      setIsTranslating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (question.text && answers) {
+      translateContent(language, question.text, answers);
+    }
+  }, [language, question.text, answers, translateContent]);
+
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          Question {index + 1}: {questionText}
+          Question {index + 1}: {isTranslating ? <Loader2 className="inline-block animate-spin" /> : translatedContent?.questionText || question.text}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {areAnswersLoading ? (
+        {areAnswersLoading || isTranslating ? (
           <Loader2 className="animate-spin" />
         ) : (
           <RadioGroup
@@ -659,7 +556,7 @@ function QuestionDisplay({
             {answers?.map(answer => {
               const isSelected = selectedAnswer === answer.id;
               const isCorrectAnswer = answer.id === question.correctAnswerId;
-              const answerText = getLocalizedText(answer.text, language);
+              const answerText = translatedContent?.answers[answer.id] || answer.text;
 
               let ringColor = 'ring-transparent';
               if (submitted) {

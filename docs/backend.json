@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -106,14 +107,8 @@
           "description": "Reference to Quiz. (Relationship: Quiz 1:N Question)"
         },
         "text": {
-          "type": "object",
-          "description": "Text of the question, localized in multiple languages.",
-          "properties": {
-            "English": { "type": "string" },
-            "Hindi": { "type": "string" },
-            "Tamil": { "type": "string" },
-            "Bengali": { "type": "string" }
-          }
+          "type": "string",
+          "description": "Text of the question in English."
         },
         "correctAnswerId": {
           "type": "string",
@@ -142,14 +137,8 @@
           "description": "Reference to Question. (Relationship: Question 1:N Answer)"
         },
         "text": {
-          "type": "object",
-          "description": "Text of the answer option, localized in multiple languages.",
-          "properties": {
-            "English": { "type": "string" },
-            "Hindi": { "type": "string" },
-            "Tamil": { "type": "string" },
-            "Bengali": { "type": "string" }
-          }
+          "type": "string",
+          "description": "Text of the answer option in English."
         },
         "isCorrect": {
           "type": "boolean",
