@@ -9,6 +9,7 @@ import {
   updateDocumentNonBlocking,
   addDocumentNonBlocking,
   deleteDocumentNonBlocking,
+  useUser,
 } from '@/firebase';
 import {
   doc,
@@ -17,6 +18,7 @@ import {
   DocumentReference,
   Query,
   getDocs,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {
   Card,
@@ -137,7 +139,7 @@ export default function QuizClientView({ quizId }: { quizId: string }) {
       {userType === 'teacher' ? (
         <TeacherView questions={questions || []} questionsRef={questionsRef} />
       ) : (
-        <StudentView questions={questions} />
+        <StudentView quizId={quizId} questions={questions} />
       )}
     </div>
   );
@@ -395,8 +397,10 @@ type TranslatedContent = {
 };
 
 function StudentView({
+  quizId,
   questions,
 }: {
+  quizId: string;
   questions: (Omit<Question, 'answers' | 'ref'> & { ref: DocumentReference })[] | null;
 }) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(
@@ -405,6 +409,8 @@ function StudentView({
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [selectedLanguage, setSelectedLanguage] = useState<Language>('English');
+  const firestore = useFirestore();
+  const { user } = useUser();
 
 
   const handleAnswerChange = (questionId: string, answerId: string) => {
@@ -412,14 +418,25 @@ function StudentView({
   };
 
   const handleSubmit = () => {
+    if (!questions || !firestore || !user) return;
+    
     let newScore = 0;
-    questions?.forEach((q: Omit<Question, 'answers' | 'ref'>) => {
+    questions.forEach((q: Omit<Question, 'answers' | 'ref'>) => {
       if (selectedAnswers[q.id] === q.correctAnswerId) {
         newScore++;
       }
     });
     setScore(newScore);
     setSubmitted(true);
+    
+    const resultsRef = collection(firestore, 'users', user.uid, 'studentQuizResults');
+    addDocumentNonBlocking(resultsRef, {
+        userId: user.uid,
+        quizId: quizId,
+        score: newScore,
+        totalQuestions: questions.length,
+        submissionDateTime: serverTimestamp(),
+    });
   };
 
   return (

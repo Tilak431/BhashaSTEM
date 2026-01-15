@@ -173,6 +173,10 @@
           "type": "number",
           "description": "The student's score on the quiz."
         },
+        "totalQuestions": {
+          "type": "number",
+          "description": "The total number of questions in the quiz."
+        },
         "submissionDateTime": {
           "type": "string",
           "description": "Date and time when the quiz was submitted.",
@@ -184,6 +188,7 @@
         "userId",
         "quizId",
         "score",
+        "totalQuestions",
         "submissionDateTime"
       ]
     },

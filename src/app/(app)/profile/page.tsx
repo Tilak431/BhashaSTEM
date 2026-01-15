@@ -17,36 +17,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Medal, Rocket, ShieldCheck, Target } from 'lucide-react';
+import { Loader2, Medal, Rocket, ShieldCheck, Target } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Separator } from '@/components/ui/separator';
-
-const mockQuizHistory = [
-  {
-    id: 'q1',
-    name: 'Introduction to Kinematics',
-    score: '8/10',
-    date: '2024-07-15',
-  },
-  {
-    id: 'q2',
-    name: 'Periodic Table Basics',
-    score: '18/20',
-    date: '2024-07-12',
-  },
-  {
-    id: 'q3',
-    name: 'Cell Biology Fundamentals',
-    score: '10/15',
-    date: '2024-07-10',
-  },
-  {
-    id: 'q4',
-    name: 'Algebraic Equations',
-    score: '10/10',
-    date: '2024-07-08',
-  },
-];
+import { useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
+import { format } from 'date-fns';
 
 const mockAchievements = [
   {
@@ -93,21 +69,43 @@ const mockAchievements = [
   },
 ];
 
+interface StudentQuizResult {
+    id: string;
+    quizId: string;
+    score: number;
+    totalQuestions: number;
+    submissionDateTime: {
+        seconds: number;
+        nanoseconds: number;
+    };
+}
+
 export default function ProfilePage() {
   const [userName, setUserName] = useState('');
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const resultsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return query(
+        collection(firestore, 'users', user.uid, 'studentQuizResults'),
+        orderBy('submissionDateTime', 'desc')
+    );
+  }, [firestore, user]);
+
+  const { data: quizHistory, isLoading } = useCollection<StudentQuizResult>(resultsQuery);
+
+
   useEffect(() => {
     setUserName(localStorage.getItem('userName') || 'Student');
   }, []);
 
-  const totalQuizzes = mockQuizHistory.length;
-  const totalCorrect = mockQuizHistory.reduce((acc, q) => {
-    const [score, total] = q.score.split('/').map(Number);
-    return acc + score;
-  }, 0);
-  const totalPossible = mockQuizHistory.reduce((acc, q) => {
-    const [score, total] = q.score.split('/').map(Number);
-    return acc + total;
-  }, 0);
+  const totalQuizzes = quizHistory?.length || 0;
+  
+  const totalCorrect = quizHistory?.reduce((acc, q) => acc + q.score, 0) || 0;
+
+  const totalPossible = quizHistory?.reduce((acc, q) => acc + q.totalQuestions, 0) || 0;
+  
   const averageScore =
     totalPossible > 0
       ? ((totalCorrect / totalPossible) * 100).toFixed(0)
@@ -153,7 +151,7 @@ export default function ProfilePage() {
         <CardHeader>
           <CardTitle className="font-headline">Achievements</CardTitle>
           <CardDescription>
-            Badges you've earned on your learning adventure.
+            Badges you've earned on your learning adventure. (Coming soon!)
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -181,21 +179,35 @@ export default function ProfilePage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Quiz Name</TableHead>
+                <TableHead>Quiz ID</TableHead>
                 <TableHead>Score</TableHead>
                 <TableHead className="text-right">Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockQuizHistory.map(quiz => (
-                <TableRow key={quiz.id}>
-                  <TableCell className="font-medium">{quiz.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{quiz.score}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground">{quiz.date}</TableCell>
+              {isLoading ? (
+                <TableRow>
+                    <TableCell colSpan={3} className="text-center">
+                        <Loader2 className="mx-auto h-6 w-6 animate-spin" />
+                    </TableCell>
                 </TableRow>
-              ))}
+              ) : quizHistory && quizHistory.length > 0 ? (
+                  quizHistory.map(quiz => (
+                    <TableRow key={quiz.id}>
+                      <TableCell className="font-medium truncate max-w-[120px]">{quiz.quizId}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{quiz.score} / {quiz.totalQuestions}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {format(new Date(quiz.submissionDateTime.seconds * 1000), 'yyyy-MM-dd')}
+                      </TableCell>
+                    </TableRow>
+                  ))
+              ) : (
+                <TableRow>
+                    <TableCell colSpan={3} className="text-center">No quiz history yet.</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
