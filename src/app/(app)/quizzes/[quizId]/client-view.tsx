@@ -635,7 +635,12 @@ function QuestionDisplay({
   const { data: answers, isLoading: areAnswersLoading } =
     useCollection<Omit<Answer, 'ref'>>(answersRef);
 
-  const questionText = (question.text || {})[language] || (question.text || {})['English'] || "Question text not available.";
+  const getLocalizedText = (textObj: LocalizedText | undefined, lang: Language) => {
+    const text = textObj || {};
+    return text[lang] || text['English'] || "Text not available.";
+  }
+
+  const questionText = getLocalizedText(question.text, language);
 
   return (
     <Card>
@@ -657,7 +662,7 @@ function QuestionDisplay({
             {answers?.map(answer => {
               const isSelected = selectedAnswer === answer.id;
               const isCorrectAnswer = answer.id === question.correctAnswerId;
-              const answerText = (answer.text || {})[language] || (answer.text || {})['English'] || "Answer text not available.";
+              const answerText = getLocalizedText(answer.text, language);
 
               let ringColor = 'ring-transparent';
               if (submitted) {
