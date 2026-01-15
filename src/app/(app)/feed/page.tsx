@@ -11,6 +11,7 @@ import {
   updateDocumentNonBlocking,
   deleteDocumentNonBlocking,
   setDocumentNonBlocking,
+  useDoc,
 } from '@/firebase';
 import {
   collection,
@@ -379,5 +380,3 @@ export default function FeedPage() {
     </div>
   );
 }
-
-    
