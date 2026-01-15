@@ -17,6 +17,8 @@ import {
   MessageCircle,
   Loader2,
   Star,
+  Rss,
+  Search,
 } from 'lucide-react';
 import {
   Card,
@@ -36,7 +38,7 @@ import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { Progress } from '@/components/ui/progress';
 
 const quickActions = [
-  {
+    {
     title: 'Browse Library',
     description: 'Explore videos, articles, and simulations.',
     href: '/library',
@@ -53,6 +55,18 @@ const quickActions = [
     description: 'Get answers to your STEM questions instantly.',
     href: '/ask',
     icon: MessageCircle,
+  },
+  {
+    title: 'Community Feed',
+    description: 'Connect with peers and share your progress.',
+    href: '/feed',
+    icon: Rss,
+  },
+  {
+    title: 'Search Users',
+    description: 'Find and connect with your classmates.',
+    href: '/search',
+    icon: Search,
   },
 ];
 
