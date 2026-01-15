@@ -121,7 +121,8 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   const { user: currentUser } = useUser();
   const firestore = useFirestore();
 
-  const profileUserId = profileUserIdProp || currentUser?.uid;
+  const profileUserId = useMemo(() => profileUserIdProp || currentUser?.uid, [profileUserIdProp, currentUser?.uid]);
+
   const isOwnProfile = !profileUserIdProp || profileUserIdProp === currentUser?.uid;
 
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -133,13 +134,13 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
-  const followersRef = useMemoFirebase(() => profileUserId ? collection(firestore!, 'users', profileUserId, 'followers') : null, [profileUserId]);
-  const followingRef = useMemoFirebase(() => profileUserId ? collection(firestore!, 'users', profileUserId, 'following') : null, [profileUserId]);
+  const followersRef = useMemoFirebase(() => (firestore && profileUserId) ? collection(firestore, 'users', profileUserId, 'followers') : null, [firestore, profileUserId]);
+  const followingRef = useMemoFirebase(() => (firestore && profileUserId) ? collection(firestore, 'users', profileUserId, 'following') : null, [firestore, profileUserId]);
   
   const { data: followers } = useCollection<Follow>(followersRef);
   const { data: following } = useCollection<Follow>(followingRef);
 
-  const currentUserFollowingRef = useMemoFirebase(() => (firestore && currentUser && profileUserId) ? doc(firestore, 'users', currentUser.uid, 'following', profileUserId) : null, [firestore, currentUser, profileUserId]);
+  const currentUserFollowingRef = useMemoFirebase(() => (firestore && currentUser?.uid && profileUserId) ? doc(firestore, 'users', currentUser.uid, 'following', profileUserId) : null, [firestore, currentUser?.uid, profileUserId]);
   const { data: isFollowingData, isLoading: isFollowingLoading } = useDoc(currentUserFollowingRef);
   const isFollowing = !!isFollowingData;
 
