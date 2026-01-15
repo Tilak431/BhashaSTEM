@@ -73,6 +73,10 @@
           "type": "string",
           "description": "The text content of the post."
         },
+        "imageUrl": {
+          "type": "string",
+          "description": "The URL of the image attached to the post (as a data URI)."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -87,7 +91,7 @@
           "description": "The number of comments on the post."
         }
       },
-      "required": ["userId", "content", "createdAt"]
+      "required": ["userId", "createdAt"]
     },
     "Like": {
       "$schema": "http://json-schema.org/draft-07/schema#",

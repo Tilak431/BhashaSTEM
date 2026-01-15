@@ -38,9 +38,11 @@ import {
   Heart,
   Loader2,
   MessageSquare,
+  Paperclip,
   Send,
   Trash2,
   User as UserIcon,
+  X,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useForm, useFormState } from 'react-hook-form';
@@ -54,12 +56,15 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Input } from '@/components/ui/input';
+import Image from 'next/image';
+import { Label } from '@/components/ui/label';
 
 interface Post {
   userId: string;
-  content: string;
+  content?: string;
+  imageUrl?: string;
   createdAt: { seconds: number; nanoseconds: number };
   likeCount: number;
   commentCount: number;
@@ -76,7 +81,7 @@ interface Comment {
 }
 
 const createPostSchema = z.object({
-  content: z.string().min(1, 'Post cannot be empty.').max(280),
+  content: z.string().max(280),
 });
 
 function PostAuthor({ userId }: { userId: string }) {
@@ -210,26 +215,30 @@ function PostCard({ post }: { post: WithId<Post> }) {
         : null,
     [firestore, user, post.id]
   );
-  const { data: likeDoc } = useDoc(likeRef);
+  const { data: likeDoc, isLoading: isLikeLoading } = useDoc(likeRef);
   const isLiked = !!likeDoc;
 
   const handleLike = async () => {
-    if (!user || !firestore) return;
+    if (!user || !firestore || !likeRef) return;
     const postRef = doc(firestore, 'posts', post.id);
 
-    await runTransaction(firestore, async transaction => {
-      const postDoc = await transaction.get(postRef);
-      if (!postDoc.exists()) {
-        throw 'Document does not exist!';
-      }
-      const newLikeCount = (postDoc.data().likeCount || 0) + (isLiked ? -1 : 1);
-      transaction.update(postRef, { likeCount: newLikeCount });
-      if (isLiked) {
-        transaction.delete(likeRef!);
-      } else {
-        transaction.set(likeRef!, { userId: user.uid });
-      }
-    });
+    try {
+      await runTransaction(firestore, async transaction => {
+        const likeDoc = await transaction.get(likeRef);
+        
+        if (likeDoc.exists()) {
+          // User has liked the post, so unlike it.
+          transaction.update(postRef, { likeCount: increment(-1) });
+          transaction.delete(likeRef);
+        } else {
+          // User has not liked the post, so like it.
+          transaction.update(postRef, { likeCount: increment(1) });
+          transaction.set(likeRef, { userId: user.uid });
+        }
+      });
+    } catch (e) {
+      console.error("Transaction failed: ", e);
+    }
   };
 
   const timeAgo = post.createdAt
@@ -247,7 +256,12 @@ function PostCard({ post }: { post: WithId<Post> }) {
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+        {post.content && <p className="text-sm whitespace-pre-wrap">{post.content}</p>}
+        {post.imageUrl && (
+            <div className="mt-4 relative aspect-video rounded-lg overflow-hidden border">
+                <Image src={post.imageUrl} alt="Post image" layout="fill" objectFit="cover" />
+            </div>
+        )}
       </CardContent>
       <CardFooter className="flex-col items-start gap-2">
         <div className="flex gap-4">
@@ -255,7 +269,7 @@ function PostCard({ post }: { post: WithId<Post> }) {
             variant="ghost"
             size="sm"
             onClick={handleLike}
-            disabled={!user}
+            disabled={!user || isLikeLoading}
             className="flex items-center gap-1.5"
           >
             <Heart
@@ -282,6 +296,9 @@ function PostCard({ post }: { post: WithId<Post> }) {
 function CreatePost() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageDataUri, setImageDataUri] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof createPostSchema>>({
     resolver: zodResolver(createPostSchema),
@@ -290,17 +307,45 @@ function CreatePost() {
 
   const { isSubmitting } = form.formState;
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+        setImageDataUri(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImagePreview(null);
+    setImageDataUri(null);
+    if(fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
+  }
+
+
   const onSubmit = async (values: z.infer<typeof createPostSchema>) => {
     if (!user || !firestore) return;
+    if (!values.content && !imageDataUri) {
+        form.setError("content", { type: "manual", message: "A post must have either text or an image." });
+        return;
+    }
+
     const postsRef = collection(firestore, 'posts');
     await addDocumentNonBlocking(postsRef, {
       userId: user.uid,
       content: values.content,
+      imageUrl: imageDataUri,
       createdAt: serverTimestamp(),
       likeCount: 0,
       commentCount: 0,
     });
     form.reset();
+    removeImage();
   };
 
   if (!user) return null;
@@ -315,7 +360,7 @@ function CreatePost() {
               Share your progress, achievements, or ask a question.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <FormField
               control={form.control}
               name="content"
@@ -331,8 +376,21 @@ function CreatePost() {
                 </FormItem>
               )}
             />
+            {imagePreview && (
+                 <div className="relative w-full aspect-video">
+                    <Image src={imagePreview} alt="Image preview" layout="fill" className="rounded-md object-cover" />
+                    <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-6 w-6" onClick={removeImage}>
+                        <X className="h-4 w-4" />
+                    </Button>
+                </div>
+            )}
           </CardContent>
-          <CardFooter className="justify-end">
+          <CardFooter className="justify-between">
+             <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
+                <Paperclip className="h-4 w-4" />
+                <span className="sr-only">Attach image</span>
+             </Button>
+             <Input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/jpg" />
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -380,3 +438,5 @@ export default function FeedPage() {
     </div>
   );
 }
+
+    
