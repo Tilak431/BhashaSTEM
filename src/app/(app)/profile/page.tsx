@@ -13,7 +13,7 @@ function ProfilePageContent() {
 
 export default function ProfilePage() {
     return (
-        <Suspense fallback={<div>Loading Profile...</div>}>
+        <Suspense fallback={<div className="flex h-full w-full items-center justify-center">Loading Profile...</div>}>
             <ProfilePageContent />
         </Suspense>
     )

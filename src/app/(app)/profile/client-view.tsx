@@ -19,15 +19,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Medal, Rocket, ShieldCheck, Target, Award, Star, Edit, Check, Settings, UserPlus, UserCheck } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
-import { Separator } from '@/components/ui/separator';
 import {
   useUser,
   useCollection,
   useFirestore,
   useMemoFirebase,
   useDoc,
-  setDocumentNonBlocking,
-  deleteDocumentNonBlocking,
   updateDocumentNonBlocking,
 } from '@/firebase';
 import { collection, query, orderBy, doc, DocumentReference, writeBatch, serverTimestamp } from 'firebase/firestore';
@@ -118,7 +115,7 @@ function QuizHistoryRow({ result }: { result: StudentQuizResult }) {
 
 
 export default function ProfileClientView({ userId: profileUserIdProp }: { userId: string | null }) {
-  const { user: currentUser } = useUser();
+  const { user: currentUser, isUserLoading: isAuthLoading } = useUser();
   const firestore = useFirestore();
 
   const profileUserId = useMemo(() => profileUserIdProp || currentUser?.uid, [profileUserIdProp, currentUser?.uid]);
@@ -137,8 +134,8 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   const followersRef = useMemoFirebase(() => (firestore && profileUserId) ? collection(firestore, 'users', profileUserId, 'followers') : null, [firestore, profileUserId]);
   const followingRef = useMemoFirebase(() => (firestore && profileUserId) ? collection(firestore, 'users', profileUserId, 'following') : null, [firestore, profileUserId]);
   
-  const { data: followers } = useCollection<Follow>(followersRef);
-  const { data: following } = useCollection<Follow>(followingRef);
+  const { data: followers, isLoading: areFollowersLoading } = useCollection<Follow>(followersRef);
+  const { data: following, isLoading: areFollowingLoading } = useCollection<Follow>(followingRef);
 
   const currentUserFollowingRef = useMemoFirebase(() => (firestore && currentUser?.uid && profileUserId) ? doc(firestore, 'users', currentUser.uid, 'following', profileUserId) : null, [firestore, currentUser?.uid, profileUserId]);
   const { data: isFollowingData, isLoading: isFollowingLoading } = useDoc(currentUserFollowingRef);
@@ -170,11 +167,9 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
 
     const batch = writeBatch(firestore);
     
-    // Add to current user's "following" list
     const followingDocRef = doc(firestore, 'users', currentUser.uid, 'following', profileUserId);
     batch.set(followingDocRef, { userId: profileUserId, followedAt: serverTimestamp() });
     
-    // Add current user to the other user's "followers" list
     const followerDocRef = doc(firestore, 'users', profileUserId, 'followers', currentUser.uid);
     batch.set(followerDocRef, { userId: currentUser.uid, followedAt: serverTimestamp() });
 
@@ -186,28 +181,28 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
 
       const batch = writeBatch(firestore);
 
-      // Remove from current user's "following" list
       const followingDocRef = doc(firestore, 'users', currentUser.uid, 'following', profileUserId);
       batch.delete(followingDocRef);
 
-      // Remove current user from the other user's "followers" list
       const followerDocRef = doc(firestore, 'users', profileUserId, 'followers', currentUser.uid);
       batch.delete(followerDocRef);
       
       await batch.commit();
   };
+  
+  const isLoading = isAuthLoading || isProfileLoading || areFollowersLoading || areFollowingLoading || isHistoryLoading;
 
-  if (isProfileLoading || !userProfile) {
+  if (isLoading || !profileUserId) {
     return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  }
+
+  if (!userProfile) {
+    return <div className="flex h-full w-full items-center justify-center">User profile not found.</div>;
   }
   
   const totalQuizzes = quizHistory?.length || 0;
-  const totalCorrect = quizHistory?.reduce((acc, q) => acc + q.score, 0) || 0;
-  const totalPossible = quizHistory?.reduce((acc, q) => acc + q.totalQuestions, 0) || 0;
-  const averageScore = totalPossible > 0 ? ((totalCorrect / totalPossible) * 100).toFixed(0) : 0;
-  
   const totalXp = userProfile?.totalXp || 0;
-  const { level, xpProgress, xpToNextLevel, progressPercentage, xpForNextLevel } = calculateLevel(totalXp);
+  const { level, xpToNextLevel, progressPercentage, xpForNextLevel } = calculateLevel(totalXp);
 
 
   return (
