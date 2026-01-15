@@ -118,7 +118,7 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   const { user: currentUser, isUserLoading: isAuthLoading } = useUser();
   const firestore = useFirestore();
 
-  const profileUserId = useMemo(() => profileUserIdProp || currentUser?.uid, [profileUserIdProp, currentUser?.uid]);
+  const profileUserId = profileUserIdProp ?? currentUser?.uid;
 
   const isOwnProfile = !profileUserIdProp || profileUserIdProp === currentUser?.uid;
 
@@ -192,11 +192,15 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   
   const isLoading = isAuthLoading || isProfileLoading || areFollowersLoading || areFollowingLoading || isHistoryLoading;
 
-  if (isLoading || !profileUserId) {
+  if (isAuthLoading || !profileUserId) {
     return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
-  if (!userProfile) {
+  if (isLoading) {
+      return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  }
+  
+  if (!isProfileLoading && !userProfile) {
     return <div className="flex h-full w-full items-center justify-center">User profile not found.</div>;
   }
   
@@ -232,12 +236,12 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
       <Card>
         <CardHeader className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
           <Avatar className="h-28 w-28 border-4 border-primary">
-            <AvatarImage src={`https://picsum.photos/seed/${userProfile.name}/120/120`}/>
-            <AvatarFallback className="text-4xl">{userProfile.name.charAt(0).toUpperCase()}</AvatarFallback>
+            <AvatarImage src={`https://picsum.photos/seed/${userProfile!.name}/120/120`}/>
+            <AvatarFallback className="text-4xl">{userProfile!.name.charAt(0).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="space-y-4 flex-1">
             <div className='flex items-center gap-4 justify-center md:justify-start'>
-                <CardTitle className="text-3xl font-headline">{userProfile.name}</CardTitle>
+                <CardTitle className="text-3xl font-headline">{userProfile!.name}</CardTitle>
                 {!isOwnProfile && !isFollowingLoading && (
                     isFollowing ? (
                         <Button variant="secondary" onClick={handleUnfollow}><UserCheck className="mr-2" /> Following</Button>
@@ -263,7 +267,7 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
                     </div>
                 ) : (
                     <div className='flex items-start gap-2'>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap flex-1">{userProfile.bio || (isOwnProfile && 'No bio yet. Add one!')}</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap flex-1">{userProfile!.bio || (isOwnProfile && 'No bio yet. Add one!')}</p>
                         {isOwnProfile && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingBio(true)}><Edit className='h-4 w-4'/></Button>}
                     </div>
                 )}
@@ -292,7 +296,7 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
       <Card>
         <CardHeader>
           <CardTitle className="font-headline">Quiz History</CardTitle>
-          <CardDescription>A log of {isOwnProfile ? 'your' : `${userProfile.name}'s`} recent assessments.</CardDescription>
+          <CardDescription>A log of {isOwnProfile ? 'your' : `${userProfile!.name}'s`} recent assessments.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
