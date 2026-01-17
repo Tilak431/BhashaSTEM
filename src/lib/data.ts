@@ -1,4 +1,3 @@
-import { PlaceHolderImages } from '@/lib/placeholder-images';
 import {
   BiologyIcon,
   ChemistryIcon,
@@ -8,17 +7,6 @@ import {
 
 export type Subject = 'Physics' | 'Chemistry' | 'Biology' | 'Math';
 export type Language = 'English' | 'Hindi' | 'Tamil' | 'Bengali';
-
-export interface Resource {
-  id: string;
-  title: string;
-  description: string;
-  subject: Subject;
-  language: Language;
-  type: 'Video' | 'Article' | 'Simulation';
-  imageId: string;
-  Icon: React.ElementType;
-}
 
 export interface Quiz {
   id: string;
@@ -32,89 +20,6 @@ export interface ProgressData {
   conceptsMastered: number;
   quizzesCompleted: number;
 }
-
-export const resources: Resource[] = [
-  {
-    id: '1',
-    title: 'Introduction to Newtonian Mechanics',
-    description: 'A video series explaining the fundamental laws of motion.',
-    subject: 'Physics',
-    language: 'English',
-    type: 'Video',
-    imageId: 'physics_1',
-    Icon: PhysicsIcon,
-  },
-  {
-    id: '2',
-    title: 'रासायनिक बंधनों को समझना',
-    description: 'An interactive simulation about chemical bonds.',
-    subject: 'Chemistry',
-    language: 'Hindi',
-    type: 'Simulation',
-    imageId: 'chemistry_1',
-    Icon: ChemistryIcon,
-  },
-  {
-    id: '3',
-    title: 'Cell Biology Basics',
-    description: 'A comprehensive article on the structure and function of cells.',
-    subject: 'Biology',
-    language: 'English',
-    type: 'Article',
-    imageId: 'biology_1',
-    Icon: BiologyIcon,
-  },
-  {
-    id: '4',
-    title: 'Calculus for Beginners',
-    description: 'Learn the basics of differentiation and integration.',
-    subject: 'Math',
-    language: 'Tamil',
-    type: 'Video',
-    imageId: 'math_1',
-    Icon: MathIcon,
-  },
-  {
-    id: '5',
-    title: 'Quantum Physics Explained',
-    description: 'A deep dive into the weird world of quantum mechanics.',
-    subject: 'Physics',
-    language: 'Bengali',
-    type: 'Article',
-    imageId: 'physics_2',
-    Icon: PhysicsIcon,
-  },
-  {
-    id: '6',
-    title: 'Organic Chemistry Reactions',
-    description: 'An interactive guide to common organic reactions.',
-    subject: 'Chemistry',
-    language: 'English',
-    type: 'Simulation',
-    imageId: 'chemistry_2',
-    Icon: ChemistryIcon,
-  },
-    {
-    id: '7',
-    title: 'மரபியல் மற்றும் டிஎன்ஏ',
-    description: 'டிஎன்ஏ அமைப்பு மற்றும் செயல்பாட்டைப் பற்றிய ஒரு கட்டுரை.',
-    subject: 'Biology',
-    language: 'Tamil',
-    type: 'Article',
-    imageId: 'biology_2',
-    Icon: BiologyIcon,
-  },
-  {
-    id: '8',
-    title: 'বীজগণিতের মূলসূত্র',
-    description: 'বীজগণিতের মৌলিক ধারণাগুলি শিখুন।',
-    subject: 'Math',
-    language: 'Bengali',
-    type: 'Video',
-    imageId: 'math_2',
-    Icon: MathIcon,
-  },
-];
 
 export const quizzes: Quiz[] = [
   { id: 'q1', title: 'Kinematics Challenge', subject: 'Physics', questionCount: 15 },
