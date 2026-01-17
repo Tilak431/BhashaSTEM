@@ -119,9 +119,18 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
   const { user: currentUser, isUserLoading: isAuthLoading } = useUser();
   const firestore = useFirestore();
 
-  const profileUserId = useMemo(() => profileUserIdProp ?? currentUser?.uid, [profileUserIdProp, currentUser?.uid]);
+  const profileUserId = useMemo(() => {
+    // Only return a definitive user ID when it's available, preventing renders with null/undefined.
+    if (profileUserIdProp) return profileUserIdProp;
+    if (currentUser) return currentUser.uid;
+    return null;
+  }, [profileUserIdProp, currentUser]);
 
-  const isOwnProfile = !profileUserIdProp || profileUserIdProp === currentUser?.uid;
+
+  const isOwnProfile = useMemo(() => {
+    if (!profileUserId || !currentUser) return false;
+    return profileUserId === currentUser.uid;
+  }, [profileUserId, currentUser]);
 
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioText, setBioText] = useState('');
@@ -191,17 +200,13 @@ export default function ProfileClientView({ userId: profileUserIdProp }: { userI
       await batch.commit();
   };
   
-  const isLoading = isAuthLoading || isProfileLoading || areFollowersLoading || areFollowingLoading || isHistoryLoading;
-
-  if (isAuthLoading || !profileUserId) {
-    return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-  }
+  const isLoading = isAuthLoading || !profileUserId || isProfileLoading || areFollowersLoading || areFollowingLoading || isHistoryLoading;
 
   if (isLoading) {
       return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
   
-  if (!isProfileLoading && !userProfile) {
+  if (!userProfile) {
     return <div className="flex h-full w-full items-center justify-center">User profile not found.</div>;
   }
   
