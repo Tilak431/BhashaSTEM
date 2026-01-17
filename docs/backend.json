@@ -167,6 +167,32 @@
       },
       "required": ["language", "summary", "createdAt"]
     },
+    "CachedQuestion": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Cached Question",
+      "type": "object",
+      "description": "Represents a question that has been answered by the AI and cached for future use.",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The text of the question that was asked."
+        },
+        "language": {
+          "type": "string",
+          "description": "The language of the question."
+        },
+        "answer": {
+          "type": "string",
+          "description": "The AI-generated answer."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the answer was cached."
+        }
+      },
+      "required": ["question", "language", "answer", "createdAt"]
+    },
     "ClassSection": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ClassSection",
@@ -502,6 +528,22 @@
         }
       },
       {
+        "path": "/cachedQuestions/{questionId}",
+        "definition": {
+          "entityName": "CachedQuestion",
+          "schema": {
+            "$ref": "#/backend/entities/CachedQuestion"
+          },
+          "description": "Stores cached AI-generated answers to user questions.",
+          "params": [
+            {
+              "name": "questionId",
+              "description": "The unique ID of the cached question."
+            }
+          ]
+        }
+      },
+      {
         "path": "/classSections/{classSectionId}",
         "definition": {
           "entityName": "ClassSection",
@@ -637,5 +679,3 @@
     "reasoning": "The Firestore structure is designed to securely manage quizzes, questions, answers, and student results within class sections, adhering to the principles of Authorization Independence and Structural Segregation. The keys (teacherKey, studentKey) are not stored in the database itself, but validated upon user login to determine roles. Once validated the user's role could be stored in local storage. \n\n**Authorization Independence:**\nTo ensure authorization independence and avoid using `get()` calls in security rules, the structure denormalizes the `classSectionId` into the `Quiz` collection and its subcollections (`questions`, `answers`, `studentQuizResults`, `studentAnswers`). This enables direct access control based on the class section. While the keys themselves are not stored, the fact that the user has access to a class section (determined at login) grants specific permissions within that section's data. Keys should never be stored in the database, this is for security reasons. The system checks the provided key against the expected value during authentication, granting either teacher or student access based on the key's validity. This determination can inform the roles to apply within the application.\n\n**Structural Segregation:**\nThe data is segregated based on ownership and function. User data is stored separately under `/users/{userId}`, while class sections and their associated quizzes are stored under `/classSections/{classSectionId}`. Social features like posts, likes, and comments are stored in a global `/posts` collection with subcollections for likes and comments to allow for a public feed and efficient querying. Questions, answers, student results, and student answers are further segregated as subcollections of quizzes within class sections, maintaining a clear hierarchy and predictable access patterns.\n\n**QAPs (Rules are not Filters):**\nSecure `list` operations are supported by the path-based ownership model for user data and the denormalized `classSectionId` for quizzes and related data. Security rules can efficiently filter list operations based on the requesting user's ID or the accessible `classSectionId`, without needing to iterate through documents and inspect their contents. The keys provide a means to define context and segregate different access based on role, and are not stored in the database, as they should be."
   }
 }
-
-    
