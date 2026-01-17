@@ -149,9 +149,9 @@ function CreateResourceDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add New Resource</DialogTitle>
+          <DialogTitle>Add a Resource Link</DialogTitle>
           <DialogDescription>
-            Upload a new learning material for your students.
+            Provide a link to an existing learning material on the web.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -192,7 +192,7 @@ function CreateResourceDialog({
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isSubmitting || !title || !description || !subject || !type || !fileUrl}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Add Resource
+            Add Link
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -298,7 +298,7 @@ export default function LibraryPage() {
         </div>
         {userType === 'teacher' && (
           <Button onClick={() => setIsCreateDialogOpen(true)}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Resource
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Resource Link
           </Button>
         )}
       </div>
