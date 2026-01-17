@@ -54,6 +54,7 @@ import {
   BookOpen,
   PlayCircle,
   Volume2,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -284,6 +285,7 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioDataUri, setAudioDataUri] = useState<string | null>(null);
+  const [audioSize, setAudioSize] = useState<string | null>(null);
 
   const handleLanguageChange = async (lang: string) => {
     if (!lang) return;
@@ -291,6 +293,7 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
     setIsLoading(true);
     setError(null);
     setAudioDataUri(null);
+    setAudioSize(null);
 
     try {
       const result = await summarizeAndSpeak({
@@ -298,6 +301,25 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
         targetLanguage: lang,
       });
       setAudioDataUri(result.audioDataUri);
+
+      // Calculate and set size
+      const base64String = result.audioDataUri.split(',')[1];
+      if (base64String) {
+        const byteLength =
+          (base64String.length * 3) / 4 -
+          (base64String.match(/==$/)
+            ? 2
+            : base64String.match(/=$/)
+            ? 1
+            : 0);
+        if (byteLength < 1024) {
+          setAudioSize(`${byteLength} B`);
+        } else if (byteLength < 1024 * 1024) {
+          setAudioSize(`${(byteLength / 1024).toFixed(1)} KB`);
+        } else {
+          setAudioSize(`${(byteLength / (1024 * 1024)).toFixed(1)} MB`);
+        }
+      }
     } catch (e) {
       console.error('Audio summary generation failed:', e);
       setError('Failed to generate audio. Please try again.');
@@ -332,10 +354,29 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
       </div>
       {error && <p className="text-xs text-destructive mt-2">{error}</p>}
       {audioDataUri && (
-        <div className="mt-3">
+        <div className="mt-3 space-y-2">
           <audio controls src={audioDataUri} className="w-full h-10">
             Your browser does not support the audio element.
           </audio>
+          <div className="flex items-center justify-between">
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={audioDataUri}
+                download={`${resource.title.replace(
+                  /\s+/g,
+                  '_'
+                )}_${selectedLanguage}_summary.wav`}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download
+              </a>
+            </Button>
+            {audioSize && (
+              <span className="text-xs text-muted-foreground font-mono">
+                {audioSize}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
