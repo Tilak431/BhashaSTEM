@@ -136,6 +136,7 @@
       "properties": {
         "title": { "type": "string", "description": "The title of the resource." },
         "description": { "type": "string", "description": "A description of the resource." },
+        "transcript": { "type": "string", "description": "A full transcript or detailed summary of the resource content." },
         "subject": { "type": "string", "description": "The subject category of the resource (e.g., Physics, Math)." },
         "type": { "type": "string", "enum": ["Video", "PDF", "Notes"], "description": "The type of the resource file." },
         "fileUrl": { "type": "string", "description": "The URL to the resource file/video." },

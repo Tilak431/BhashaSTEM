@@ -95,6 +95,7 @@ const resourceTypeIconMap: Record<string, React.ElementType> = {
 interface Resource {
   title: string;
   description: string;
+  transcript?: string;
   subject: Subject;
   type: 'Video' | 'PDF' | 'Notes';
   fileUrl: string;
@@ -153,6 +154,7 @@ function CreateResourceDialog({
 }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [transcript, setTranscript] = useState('');
   const [subject, setSubject] = useState<Subject | ''>('');
   const [type, setType] = useState<'Video' | 'PDF' | 'Notes' | ''>('');
   const [fileUrl, setFileUrl] = useState('');
@@ -174,6 +176,7 @@ function CreateResourceDialog({
       await addDocumentNonBlocking(resourcesRef, {
         title,
         description,
+        transcript,
         subject,
         type,
         fileUrl,
@@ -182,6 +185,7 @@ function CreateResourceDialog({
       });
       setTitle('');
       setDescription('');
+      setTranscript('');
       setSubject('');
       setType('');
       setFileUrl('');
@@ -195,14 +199,14 @@ function CreateResourceDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add a Resource Link</DialogTitle>
           <DialogDescription>
-            Provide a link to an existing learning material on the web.
+            Provide a link and details for a learning material on the web.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
           <div className="space-y-2">
             <Label htmlFor="res-title">Title</Label>
             <Input
@@ -219,6 +223,16 @@ function CreateResourceDialog({
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="A brief summary of the resource."
+            />
+          </div>
+           <div className="space-y-2">
+            <Label htmlFor="res-transcript">Transcript (Optional)</Label>
+            <Textarea
+              id="res-transcript"
+              value={transcript}
+              onChange={e => setTranscript(e.target.value)}
+              placeholder="Paste the full video transcript here for a more accurate AI summary."
+              className="h-32"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -296,8 +310,9 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
     setAudioSize(null);
 
     try {
+       const textToSummarize = resource.transcript || resource.description;
       const result = await summarizeAndSpeak({
-        text: resource.description,
+        text: textToSummarize,
         targetLanguage: lang,
       });
       setAudioDataUri(result.audioDataUri);

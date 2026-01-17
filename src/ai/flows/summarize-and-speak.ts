@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A flow that summarizes text, translates it, and generates audio.
@@ -11,13 +12,13 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import wav from 'wav';
 
-const SummarizeAndSpeakInputSchema = z.object({
+export const SummarizeAndSpeakInputSchema = z.object({
   text: z.string().describe('The text to summarize, translate, and speak.'),
   targetLanguage: z.string().describe('The language for the audio output.'),
 });
 export type SummarizeAndSpeakInput = z.infer<typeof SummarizeAndSpeakInputSchema>;
 
-const SummarizeAndSpeakOutputSchema = z.object({
+export const SummarizeAndSpeakOutputSchema = z.object({
   audioDataUri: z.string().describe('The generated audio as a base64 data URI.'),
 });
 export type SummarizeAndSpeakOutput = z.infer<typeof SummarizeAndSpeakOutputSchema>;
