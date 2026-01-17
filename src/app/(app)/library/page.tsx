@@ -29,6 +29,7 @@ import {
   addDocumentNonBlocking,
   deleteDocumentNonBlocking,
   WithId,
+  setDocumentNonBlocking,
 } from '@/firebase';
 import {
   collection,
@@ -37,6 +38,7 @@ import {
   orderBy,
   doc,
   serverTimestamp,
+  getDoc,
 } from 'firebase/firestore';
 import {
   BiologyIcon,
@@ -75,7 +77,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { summarizeAndSpeak } from '@/ai/flows/summarize-and-speak';
+import { summarizeText } from '@/ai/flows/summarize-and-speak';
 
 const subjectIconMap: Record<Subject, React.ElementType> = {
   Physics: PhysicsIcon,
@@ -301,27 +303,56 @@ function CreateResourceDialog({
 }
 
 function AiSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
+  const firestore = useFirestore();
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summaryText, setSummaryText] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSummaryText(null);
+    setError(null);
+  }, [selectedLanguage]);
+
   const handleGenerateSummary = async () => {
-    if (!selectedLanguage) return;
+    if (!selectedLanguage || !firestore) return;
     setIsLoading(true);
     setError(null);
     setSummaryText(null);
 
+    const summaryRef = doc(firestore, 'resources', resource.id, 'summaries', selectedLanguage);
+
     try {
+      // 1. Check for a cached summary in Firestore
+      const docSnap = await getDoc(summaryRef);
+      if (docSnap.exists()) {
+        setSummaryText(docSnap.data().summary);
+        return; // Found in cache, we're done.
+      }
+
+      // 2. If not cached, call the AI to generate a new one
       const textToSummarize = resource.transcript || resource.description;
-      const result = await summarizeAndSpeak({
+      const result = await summarizeText({
         text: textToSummarize,
         targetLanguage: selectedLanguage,
       });
-      setSummaryText(result.summary);
-    } catch (e) {
-      console.error('Summary generation failed:', e);
-      setError('Failed to generate summary. Please try again.');
+      const newSummary = result.summary;
+      setSummaryText(newSummary);
+
+      // 3. Save the newly generated summary to Firestore for future use
+      await setDocumentNonBlocking(summaryRef, {
+        language: selectedLanguage,
+        summary: newSummary,
+        createdAt: serverTimestamp(),
+      });
+
+    } catch (e: any) {
+      console.error('Summary generation/caching failed:', e);
+      if (e.message?.includes('429')) {
+        setError('The request limit for the AI has been reached. Please try again later.');
+      } else {
+        setError('Failed to generate summary. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -694,3 +725,5 @@ export default function LibraryPage() {
     </div>
   );
 }
+
+    
