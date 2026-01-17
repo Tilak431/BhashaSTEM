@@ -101,6 +101,44 @@ interface Resource {
   createdAt: { seconds: number; nanoseconds: number };
 }
 
+function getYouTubeId(url: string): string | null {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+}
+
+function VideoPlayerDialog({
+  videoId,
+  isOpen,
+  onClose,
+}: {
+  videoId: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  if (!videoId) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl h-auto p-0">
+        <div className="aspect-video">
+          <iframe
+            width="100%"
+            height="100%"
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
+            title="YouTube video player"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="rounded-lg"
+          ></iframe>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function CreateResourceDialog({
   isOpen,
   onClose,
@@ -201,7 +239,7 @@ function CreateResourceDialog({
 }
 
 
-function ResourceCard({ resource, userType, firestore }: { resource: WithId<Resource>, userType: string | null, firestore: any }) {
+function ResourceCard({ resource, userType, firestore, onVideoPlay }: { resource: WithId<Resource>, userType: string | null, firestore: any, onVideoPlay: (videoId: string) => void }) {
     const [isDeleting, setIsDeleting] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const SubjectIcon = subjectIconMap[resource.subject];
@@ -221,9 +259,20 @@ function ResourceCard({ resource, userType, firestore }: { resource: WithId<Reso
         }
     };
     
+    const handleCardClick = () => {
+        if (resource.type === 'Video') {
+            const videoId = getYouTubeId(resource.fileUrl);
+            if (videoId) {
+                onVideoPlay(videoId);
+                return;
+            }
+        }
+        window.open(resource.fileUrl, '_blank', 'noopener,noreferrer');
+    };
+
     return (
         <>
-        <Card className="flex flex-col overflow-hidden hover:shadow-xl transition-shadow duration-300">
+        <Card onClick={handleCardClick} className="flex flex-col overflow-hidden hover:shadow-xl transition-shadow duration-300 cursor-pointer">
             <CardHeader className="p-4">
                 <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-lg font-headline leading-tight">{resource.title}</CardTitle>
@@ -239,7 +288,7 @@ function ResourceCard({ resource, userType, firestore }: { resource: WithId<Reso
                     <Badge variant="outline">{resource.subject}</Badge>
                 </div>
                  {userType === 'teacher' && (
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setIsDeleteDialogOpen(true)} disabled={isDeleting}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={(e) => {e.stopPropagation(); setIsDeleteDialogOpen(true)}} disabled={isDeleting}>
                         <Trash2 className="h-4 w-4" />
                     </Button>
                  )}
@@ -271,7 +320,9 @@ export default function LibraryPage() {
   const [userType, setUserType] = useState<'student' | 'teacher' | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | 'all'>('all');
-  
+  const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+
   useEffect(() => {
     const type = localStorage.getItem('userType') as 'student' | 'teacher' | null;
     setUserType(type);
@@ -288,6 +339,16 @@ export default function LibraryPage() {
 
   const { data: resources, isLoading } = useCollection<Resource>(resourcesQuery);
   const resourcesRef = useMemoFirebase(() => firestore ? collection(firestore, 'resources') : null, [firestore]);
+
+  const handlePlayVideo = (videoId: string) => {
+    setSelectedVideoId(videoId);
+    setIsVideoPlayerOpen(true);
+  };
+
+  const handleCloseVideoPlayer = () => {
+    setIsVideoPlayerOpen(false);
+    setSelectedVideoId(null);
+  };
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -343,7 +404,13 @@ export default function LibraryPage() {
       {!isLoading && resources && resources.length > 0 && (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {resources.map((resource) => (
-                <ResourceCard key={resource.id} resource={resource} userType={userType} firestore={firestore} />
+                <ResourceCard 
+                    key={resource.id} 
+                    resource={resource} 
+                    userType={userType} 
+                    firestore={firestore}
+                    onVideoPlay={handlePlayVideo}
+                />
             ))}
         </div>
       )}
@@ -356,6 +423,13 @@ export default function LibraryPage() {
             user={user}
         />
       )}
+
+      <VideoPlayerDialog
+        videoId={selectedVideoId}
+        isOpen={isVideoPlayerOpen}
+        onClose={handleCloseVideoPlayer}
+      />
     </div>
   );
 }
+
