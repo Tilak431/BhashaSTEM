@@ -581,18 +581,29 @@ export default function LibraryPage() {
 
   const resourcesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    const baseQuery = query(
-      collection(firestore, 'resources'),
-      orderBy('createdAt', 'desc')
-    );
+    const resourcesCollection = collection(firestore, 'resources');
     if (selectedSubject !== 'all') {
-      return query(baseQuery, where('subject', '==', selectedSubject));
+      // When filtering, we remove the orderBy to avoid needing a composite index.
+      // We will sort client-side later.
+      return query(resourcesCollection, where('subject', '==', selectedSubject));
     }
-    return baseQuery;
+    // For "all", we can order by creation date.
+    return query(resourcesCollection, orderBy('createdAt', 'desc'));
   }, [firestore, selectedSubject]);
 
-  const { data: resources, isLoading } =
+  const { data: rawResources, isLoading } =
     useCollection<Resource>(resourcesQuery);
+
+  const resources = useMemo(() => {
+    if (!rawResources) return null;
+    // When filtering by subject, Firestore doesn't allow ordering by another field
+    // without a composite index. So we sort client-side.
+    if (selectedSubject !== 'all' && rawResources.length > 0) {
+      return [...rawResources].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+    }
+    return rawResources;
+  }, [rawResources, selectedSubject]);
+
   const resourcesRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'resources') : null),
     [firestore]
