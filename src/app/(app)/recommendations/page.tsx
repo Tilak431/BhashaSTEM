@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -67,7 +68,7 @@ function SubmitButton() {
 }
 
 export default function RecommendationsPage() {
-  const [state, formAction] = useFormState(getRecommendationsAction, initialState);
+  const [state, formAction] = useActionState(getRecommendationsAction, initialState);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useFormState } from "react-dom";
+import { useActionState } from "react";
 import { Bot, Send, User, Loader2, Sparkles } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -46,7 +46,7 @@ const initialState: AskQuestionState = {
 
 export default function AskPage() {
   const [conversation, setConversation] = useState<ConversationEntry[]>([]);
-  const [state, formAction] = useFormState(askQuestionAction, initialState);
+  const [state, formAction] = useActionState(askQuestionAction, initialState);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
