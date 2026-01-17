@@ -61,7 +61,7 @@ After creating this detailed summary, translate it into {{{targetLanguage}}}.
 Transcript:
 {{{text}}}
 
-Your final output should ONLY be the translated summary.`,
+Respond with a JSON object with a single key "translatedSummary" containing the translated summary. Your final output should ONLY be this JSON object.`,
 });
 
 
