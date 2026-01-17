@@ -11,13 +11,13 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import wav from 'wav';
 
-const SummarizeAndSpeakInputSchema = z.object({
+export const SummarizeAndSpeakInputSchema = z.object({
   text: z.string().describe('The text to summarize, translate, and speak.'),
   targetLanguage: z.string().describe('The language for the audio output.'),
 });
 export type SummarizeAndSpeakInput = z.infer<typeof SummarizeAndSpeakInputSchema>;
 
-const SummarizeAndSpeakOutputSchema = z.object({
+export const SummarizeAndSpeakOutputSchema = z.object({
   audioDataUri: z.string().describe('The generated audio as a base64 data URI.'),
 });
 export type SummarizeAndSpeakOutput = z.infer<typeof SummarizeAndSpeakOutputSchema>;
@@ -54,7 +54,7 @@ const summarizeAndTranslatePrompt = ai.definePrompt({
     name: 'summarizeAndTranslatePrompt',
     input: { schema: z.object({ text: z.string(), targetLanguage: z.string() }) },
     output: { schema: z.object({ translatedSummary: z.string() }) },
-    prompt: `You are an expert educator creating a detailed audio summary of a lesson. Based on the provided transcript, create a comprehensive summary that captures all the main concepts, key explanations, and important examples. The summary should be thorough enough to produce an audio summary of approximately 4 to 5 minutes, giving a listener a deep understanding of the material as if they were listening to a condensed version of the original lecture.
+    prompt: `You are an expert educator creating a detailed audio summary of a lesson. Based on the provided transcript, create a comprehensive summary that captures all the main concepts, key explanations, and important examples. The summary should be thorough enough to produce an audio summary of approximately 1 to 2 minutes, giving a listener a deep understanding of the material as if they were listening to a condensed version of the original lecture.
 
 After creating this detailed summary, translate it into {{{targetLanguage}}}.
 
