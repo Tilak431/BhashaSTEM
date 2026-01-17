@@ -73,7 +73,6 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -112,10 +111,12 @@ function getYouTubeId(url: string): string | null {
 
 function VideoPlayerDialog({
   videoId,
+  videoTitle,
   isOpen,
   onClose,
 }: {
   videoId: string | null;
+  videoTitle: string;
   isOpen: boolean;
   onClose: () => void;
 }) {
@@ -124,12 +125,18 @@ function VideoPlayerDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl h-auto p-0">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{videoTitle}</DialogTitle>
+          <DialogDescription>
+            Embedded video player for {videoTitle}.
+          </DialogDescription>
+        </DialogHeader>
         <div className="aspect-video">
           <iframe
             width="100%"
             height="100%"
             src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
-            title="YouTube video player"
+            title={videoTitle}
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
@@ -407,7 +414,7 @@ function ResourceCard({
   resource: WithId<Resource>;
   userType: string | null;
   firestore: any;
-  onVideoPlay: (videoId: string) => void;
+  onVideoPlay: (videoId: string, videoTitle: string) => void;
 }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -438,7 +445,7 @@ function ResourceCard({
     if (resource.type === 'Video') {
       const videoId = getYouTubeId(resource.fileUrl);
       if (videoId) {
-        onVideoPlay(videoId);
+        onVideoPlay(videoId, resource.title);
         return;
       }
     }
@@ -561,6 +568,7 @@ export default function LibraryPage() {
   );
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [selectedVideoTitle, setSelectedVideoTitle] = useState('');
 
   useEffect(() => {
     const type = localStorage.getItem('userType') as
@@ -589,14 +597,16 @@ export default function LibraryPage() {
     [firestore]
   );
 
-  const handlePlayVideo = (videoId: string) => {
+  const handlePlayVideo = (videoId: string, videoTitle: string) => {
     setSelectedVideoId(videoId);
+    setSelectedVideoTitle(videoTitle);
     setIsVideoPlayerOpen(true);
   };
 
   const handleCloseVideoPlayer = () => {
     setIsVideoPlayerOpen(false);
     setSelectedVideoId(null);
+    setSelectedVideoTitle('');
   };
 
   return (
@@ -702,6 +712,7 @@ export default function LibraryPage() {
 
       <VideoPlayerDialog
         videoId={selectedVideoId}
+        videoTitle={selectedVideoTitle}
         isOpen={isVideoPlayerOpen}
         onClose={handleCloseVideoPlayer}
       />
