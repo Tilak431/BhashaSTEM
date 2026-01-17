@@ -6,7 +6,7 @@ import {
 } from '@/components/common/SubjectIcons';
 
 export type Subject = 'Physics' | 'Chemistry' | 'Biology' | 'Math';
-export type Language = 'English' | 'Hindi' | 'Tamil' | 'Bengali';
+export type Language = 'English' | 'Hindi' | 'Tamil' | 'Bengali' | 'Kannada';
 
 export interface Quiz {
   id: string;
@@ -37,5 +37,5 @@ export const progressData: ProgressData[] = [
   { month: 'Jun', conceptsMastered: 22, quizzesCompleted: 9 },
 ];
 
-export const languages: Language[] = ['English', 'Hindi', 'Tamil', 'Bengali'];
+export const languages: Language[] = ['English', 'Hindi', 'Tamil', 'Bengali', 'Kannada'];
 export const subjects: Subject[] = ['Physics', 'Chemistry', 'Biology', 'Math'];
