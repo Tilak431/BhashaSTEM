@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import {
   Card,
   CardContent,
@@ -245,6 +246,9 @@ function ResourceCard({ resource, userType, firestore, onVideoPlay }: { resource
     const SubjectIcon = subjectIconMap[resource.subject];
     const TypeIcon = resourceTypeIconMap[resource.type] || BookOpen;
 
+    const videoId = resource.type === 'Video' ? getYouTubeId(resource.fileUrl) : null;
+    const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+
     const handleDelete = async () => {
         if (!firestore) return;
         setIsDeleting(true);
@@ -272,7 +276,18 @@ function ResourceCard({ resource, userType, firestore, onVideoPlay }: { resource
 
     return (
         <>
-        <Card onClick={handleCardClick} className="flex flex-col overflow-hidden hover:shadow-xl transition-shadow duration-300 cursor-pointer">
+        <Card onClick={handleCardClick} className="group flex flex-col overflow-hidden hover:shadow-xl transition-shadow duration-300 cursor-pointer">
+            {thumbnailUrl && (
+                <div className="relative aspect-video w-full overflow-hidden">
+                    <Image 
+                        src={thumbnailUrl} 
+                        alt={resource.title} 
+                        fill 
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        className="object-cover transition-transform group-hover:scale-105" 
+                    />
+                </div>
+            )}
             <CardHeader className="p-4">
                 <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-lg font-headline leading-tight">{resource.title}</CardTitle>
@@ -432,4 +447,3 @@ export default function LibraryPage() {
     </div>
   );
 }
-
