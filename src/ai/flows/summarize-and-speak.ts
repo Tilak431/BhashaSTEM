@@ -12,13 +12,13 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import wav from 'wav';
 
-export const SummarizeAndSpeakInputSchema = z.object({
+const SummarizeAndSpeakInputSchema = z.object({
   text: z.string().describe('The text to summarize, translate, and speak.'),
   targetLanguage: z.string().describe('The language for the audio output.'),
 });
 export type SummarizeAndSpeakInput = z.infer<typeof SummarizeAndSpeakInputSchema>;
 
-export const SummarizeAndSpeakOutputSchema = z.object({
+const SummarizeAndSpeakOutputSchema = z.object({
   audioDataUri: z.string().describe('The generated audio as a base64 data URI.'),
 });
 export type SummarizeAndSpeakOutput = z.infer<typeof SummarizeAndSpeakOutputSchema>;
