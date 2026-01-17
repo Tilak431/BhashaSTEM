@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview A flow that summarizes text, translates it, and generates audio.
+ * @fileOverview A flow that summarizes text and translates it.
  *
  * - summarizeAndSpeak - A function that handles the entire process.
  * - SummarizeAndSpeakInput - The input type for the function.
@@ -9,46 +9,18 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import wav from 'wav';
 
 const SummarizeAndSpeakInputSchema = z.object({
   text: z.string().describe('The text to summarize, translate, and speak.'),
-  targetLanguage: z.string().describe('The language for the audio output.'),
+  targetLanguage: z.string().describe('The language for the output.'),
 });
 export type SummarizeAndSpeakInput = z.infer<typeof SummarizeAndSpeakInputSchema>;
 
 const SummarizeAndSpeakOutputSchema = z.object({
-  audioDataUri: z.string().describe('The generated audio as a base64 data URI.'),
+  summary: z.string().describe('The generated text summary.'),
 });
 export type SummarizeAndSpeakOutput = z.infer<typeof SummarizeAndSpeakOutputSchema>;
 
-
-async function toWav(
-  pcmData: Buffer,
-  channels = 1,
-  rate = 24000,
-  sampleWidth = 2
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const writer = new wav.Writer({
-      channels,
-      sampleRate: rate,
-      bitDepth: sampleWidth * 8,
-    });
-
-    let bufs = [] as any[];
-    writer.on('error', reject);
-    writer.on('data', function (d) {
-      bufs.push(d);
-    });
-    writer.on('end', function () {
-      resolve(Buffer.concat(bufs).toString('base64'));
-    });
-
-    writer.write(pcmData);
-    writer.end();
-  });
-}
 
 const summarizeAndTranslatePrompt = ai.definePrompt({
     name: 'summarizeAndTranslatePrompt',
@@ -77,35 +49,10 @@ const summarizeAndSpeakFlow = ai.defineFlow(
     if (!translationOutput?.translatedSummary) {
         throw new Error('Failed to generate translated summary.');
     }
-    const translatedSummary = translationOutput.translatedSummary;
 
-    // Step 2: Text-to-Speech
-    const { media } = await ai.generate({
-        model: 'googleai/gemini-2.5-flash-preview-tts',
-        config: {
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-                voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: 'Algenib' }, // A standard voice
-                },
-            },
-        },
-        prompt: translatedSummary,
-    });
-
-    if (!media) {
-      throw new Error('TTS media generation failed.');
-    }
-    
-    // Step 3: Convert to WAV
-    const audioBuffer = Buffer.from(
-      media.url.substring(media.url.indexOf(',') + 1),
-      'base64'
-    );
-    const wavBase64 = await toWav(audioBuffer);
-
+    // Step 2: Return the text summary
     return {
-      audioDataUri: 'data:audio/wav;base64,' + wavBase64,
+      summary: translationOutput.translatedSummary,
     };
   }
 );

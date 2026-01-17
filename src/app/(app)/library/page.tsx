@@ -53,8 +53,6 @@ import {
   Trash2,
   BookOpen,
   PlayCircle,
-  Volume2,
-  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -302,19 +300,17 @@ function CreateResourceDialog({
   );
 }
 
-function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
+function AiSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [audioDataUri, setAudioDataUri] = useState<string | null>(null);
-  const [audioSize, setAudioSize] = useState<string | null>(null);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
 
-  const handleGenerateAudio = async () => {
+  const handleGenerateSummary = async () => {
     if (!selectedLanguage) return;
     setIsLoading(true);
     setError(null);
-    setAudioDataUri(null);
-    setAudioSize(null);
+    setSummaryText(null);
 
     try {
       const textToSummarize = resource.transcript || resource.description;
@@ -322,29 +318,10 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
         text: textToSummarize,
         targetLanguage: selectedLanguage,
       });
-      setAudioDataUri(result.audioDataUri);
-
-      // Calculate and set size
-      const base64String = result.audioDataUri.split(',')[1];
-      if (base64String) {
-        const byteLength =
-          (base64String.length * 3) / 4 -
-          (base64String.match(/==$/)
-            ? 2
-            : base64String.match(/=$/)
-            ? 1
-            : 0);
-        if (byteLength < 1024) {
-          setAudioSize(`${byteLength} B`);
-        } else if (byteLength < 1024 * 1024) {
-          setAudioSize(`${(byteLength / 1024).toFixed(1)} KB`);
-        } else {
-          setAudioSize(`${(byteLength / (1024 * 1024)).toFixed(1)} MB`);
-        }
-      }
+      setSummaryText(result.summary);
     } catch (e) {
-      console.error('Audio summary generation failed:', e);
-      setError('Failed to generate audio. Please try again.');
+      console.error('Summary generation failed:', e);
+      setError('Failed to generate summary. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -353,7 +330,7 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
   return (
     <div className="mt-4 pt-4 border-t border-dashed">
       <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-        <Volume2 className="h-4 w-4" /> AI Audio Summary
+        <FileText className="h-4 w-4" /> AI Text Summary
       </Label>
       <div className="flex items-center gap-2 mt-2">
         <Select
@@ -373,7 +350,7 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
           </SelectContent>
         </Select>
         <Button
-          onClick={handleGenerateAudio}
+          onClick={handleGenerateSummary}
           disabled={!selectedLanguage || isLoading}
           size="sm"
         >
@@ -385,29 +362,10 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
         </Button>
       </div>
       {error && <p className="text-xs text-destructive mt-2">{error}</p>}
-      {audioDataUri && (
+      {summaryText && (
         <div className="mt-3 space-y-2">
-          <audio controls src={audioDataUri} className="w-full h-10">
-            Your browser does not support the audio element.
-          </audio>
-          <div className="flex items-center justify-between">
-            <Button asChild variant="outline" size="sm">
-              <a
-                href={audioDataUri}
-                download={`${resource.title.replace(
-                  /\s+/g,
-                  '_'
-                )}_${selectedLanguage}_summary.wav`}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </a>
-            </Button>
-            {audioSize && (
-              <span className="text-xs text-muted-foreground font-mono">
-                {audioSize}
-              </span>
-            )}
+           <div className="h-40 w-full rounded-md border p-3 bg-muted/50 text-sm overflow-y-auto whitespace-pre-wrap">
+            {summaryText}
           </div>
         </div>
       )}
@@ -508,7 +466,7 @@ function ResourceCard({
             {resource.description}
           </CardDescription>
           <div onClick={e => e.stopPropagation()}>
-            <AudioSummaryGenerator resource={resource} />
+            <AiSummaryGenerator resource={resource} />
           </div>
         </CardContent>
         <CardFooter className="p-4 pt-0 flex justify-between items-center">
@@ -592,11 +550,8 @@ export default function LibraryPage() {
     if (!firestore) return null;
     const resourcesCollection = collection(firestore, 'resources');
     if (selectedSubject !== 'all') {
-      // When filtering, we remove the orderBy to avoid needing a composite index.
-      // We will sort client-side later.
       return query(resourcesCollection, where('subject', '==', selectedSubject));
     }
-    // For "all", we can order by creation date.
     return query(resourcesCollection, orderBy('createdAt', 'desc'));
   }, [firestore, selectedSubject]);
 
@@ -605,13 +560,12 @@ export default function LibraryPage() {
 
   const resources = useMemo(() => {
     if (!rawResources) return null;
-    // When filtering by subject, Firestore doesn't allow ordering by another field
-    // without a composite index. So we sort client-side.
     if (selectedSubject !== 'all' && rawResources.length > 0) {
       return [...rawResources].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
     }
     return rawResources;
   }, [rawResources, selectedSubject]);
+
 
   const resourcesRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'resources') : null),
