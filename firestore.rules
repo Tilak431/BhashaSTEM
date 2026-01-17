@@ -11,7 +11,7 @@ service cloud.firestore {
     // This is NOT secure for production, but allows development to proceed.
     // We will tighten these rules later.
     match /{document=**} {
-      // Open access for any signed-in user during development.
+      // Re-applying rules to resolve permission issues.
       allow read, write: if isSignedIn();
     }
   }
