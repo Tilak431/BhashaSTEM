@@ -309,19 +309,18 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
   const [audioDataUri, setAudioDataUri] = useState<string | null>(null);
   const [audioSize, setAudioSize] = useState<string | null>(null);
 
-  const handleLanguageChange = async (lang: string) => {
-    if (!lang) return;
-    setSelectedLanguage(lang);
+  const handleGenerateAudio = async () => {
+    if (!selectedLanguage) return;
     setIsLoading(true);
     setError(null);
     setAudioDataUri(null);
     setAudioSize(null);
 
     try {
-       const textToSummarize = resource.transcript || resource.description;
+      const textToSummarize = resource.transcript || resource.description;
       const result = await summarizeAndSpeak({
         text: textToSummarize,
-        targetLanguage: lang,
+        targetLanguage: selectedLanguage,
       });
       setAudioDataUri(result.audioDataUri);
 
@@ -358,12 +357,12 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
       </Label>
       <div className="flex items-center gap-2 mt-2">
         <Select
-          onValueChange={handleLanguageChange}
+          onValueChange={setSelectedLanguage}
           disabled={isLoading}
           value={selectedLanguage}
         >
           <SelectTrigger className="flex-1 h-9">
-            <SelectValue placeholder="Listen in another language" />
+            <SelectValue placeholder="Select a language" />
           </SelectTrigger>
           <SelectContent>
             {languages.map(lang => (
@@ -373,7 +372,17 @@ function AudioSummaryGenerator({ resource }: { resource: WithId<Resource> }) {
             ))}
           </SelectContent>
         </Select>
-        {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+        <Button
+          onClick={handleGenerateAudio}
+          disabled={!selectedLanguage || isLoading}
+          size="sm"
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            'Generate'
+          )}
+        </Button>
       </div>
       {error && <p className="text-xs text-destructive mt-2">{error}</p>}
       {audioDataUri && (
