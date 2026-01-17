@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview A flow that summarizes text, translates it, and generates audio.
@@ -55,13 +54,14 @@ const summarizeAndTranslatePrompt = ai.definePrompt({
     name: 'summarizeAndTranslatePrompt',
     input: { schema: z.object({ text: z.string(), targetLanguage: z.string() }) },
     output: { schema: z.object({ translatedSummary: z.string() }) },
-    prompt: `Summarize the following text in 1-2 concise sentences. Then, translate that summary into {{{targetLanguage}}}.
+    prompt: `You are an expert educator creating a detailed audio summary of a lesson. Based on the provided transcript, create a comprehensive summary that captures all the main concepts, key explanations, and important examples. The summary should be thorough enough to produce an audio summary of approximately 4 to 5 minutes, giving a listener a deep understanding of the material as if they were listening to a condensed version of the original lecture.
 
-    Text:
-    {{{text}}}
+After creating this detailed summary, translate it into {{{targetLanguage}}}.
 
-    Your final output should ONLY be the translated summary.
-    `,
+Transcript:
+{{{text}}}
+
+Your final output should ONLY be the translated summary.`,
 });
 
 
